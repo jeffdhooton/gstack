@@ -51,42 +51,204 @@ jobs:
         if: steps.merge.outputs.result == 'clean'
         run: git push origin main
 
-      - name: Create PR for conflicts
+      # ── Conflict resolution via Claude API ──────────────────────
+      - name: Resolve conflicts with Claude
         if: steps.merge.outputs.result == 'conflict'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # Start the merge so we can see conflict markers
+          git merge upstream/main --no-edit || true
+
+          # Collect conflicted files
+          CONFLICTED=$(git diff --name-only --diff-filter=U)
+          echo "Conflicted files:"
+          echo "$CONFLICTED"
+
+          if [ -z "$CONFLICTED" ]; then
+            echo "No conflicted files found after merge attempt"
+            exit 1
+          fi
+
+          # For each conflicted file, ask Claude to resolve it
+          RESOLVED_COUNT=0
+          FAILED_FILES=""
+
+          for file in $CONFLICTED; do
+            echo "━━━ Resolving: $file ━━━"
+
+            CONTENT=$(cat "$file")
+
+            # Get the three versions for context
+            OURS=$(git show HEAD:"$file" 2>/dev/null || echo "(new file)")
+            THEIRS=$(git show upstream/main:"$file" 2>/dev/null || echo "(new file)")
+
+            # Build the prompt
+            PROMPT=$(cat <<'PROMPT_EOF'
+          You are resolving a git merge conflict in a fork of garrytan/gstack.
+
+          ## Fork context
+
+          This fork (jeffdhooton/gstack) adds orch (multi-agent orchestration) integration.
+          The custom changes are:
+
+          1. **orch/ directory** — a standalone skill for launching orch agents
+          2. **plan-ceo-review/SKILL.md.tmpl** — an "Execution Handoff" section appended
+             after the "Formatting Rules" section heading. It checks if orch is available
+             and offers to spin up agents for substantial tasks (8+ files or 2+ phases).
+          3. **plan-eng-review/SKILL.md.tmpl** — same "Execution Handoff" section appended
+             at the end, after the "Unresolved decisions" section.
+          4. **scripts/gen-skill-docs.ts** — adds orch/SKILL.md.tmpl to the template list.
+          5. **bin/gstack-update-check** — REMOTE_URL points at jeffdhooton/gstack
+          6. **gstack-upgrade/SKILL.md.tmpl** — vendored clone URL points at jeffdhooton/gstack
+
+          ## Rules for resolution
+
+          - ALWAYS preserve the orch integration sections. They are the reason this fork exists.
+          - Accept ALL upstream changes that don't conflict with orch sections.
+          - If upstream restructured a file, adapt the orch section to fit the new structure
+            (e.g., if sections were renamed/reordered, put the orch handoff in the right place).
+          - If upstream added new content near the orch sections, include both.
+          - The fork-specific URLs (jeffdhooton/gstack) must stay — never revert to garrytan/gstack
+            in update-check or upgrade paths.
+          - Do NOT add commentary, explanations, or markdown code fences around your output.
+          - Output ONLY the resolved file content, nothing else.
+          PROMPT_EOF
+          )
+
+            # Call Claude API
+            RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+              -H "Content-Type: application/json" \
+              -H "x-api-key: $ANTHROPIC_API_KEY" \
+              -H "anthropic-version: 2023-06-01" \
+              -d "$(jq -n \
+                --arg prompt "$PROMPT" \
+                --arg file "$file" \
+                --arg content "$CONTENT" \
+                --arg ours "$OURS" \
+                --arg theirs "$THEIRS" \
+                '{
+                  model: "claude-sonnet-4-20250514",
+                  max_tokens: 16000,
+                  messages: [{
+                    role: "user",
+                    content: ($prompt + "\n\n## File: " + $file + "\n\n### Current file with conflict markers:\n" + $content + "\n\n### Our version (fork main):\n" + $ours + "\n\n### Their version (upstream main):\n" + $theirs + "\n\nOutput the resolved file content:")
+                  }]
+                }'
+              )")
+
+            # Extract the text content from Claude's response
+            RESOLVED=$(echo "$RESPONSE" | jq -r '.content[0].text // empty')
+
+            if [ -z "$RESOLVED" ]; then
+              echo "ERROR: Claude returned empty response for $file"
+              echo "Response: $RESPONSE"
+              FAILED_FILES="$FAILED_FILES $file"
+              continue
+            fi
+
+            # Write resolved content and stage it
+            echo "$RESOLVED" > "$file"
+            git add "$file"
+            RESOLVED_COUNT=$((RESOLVED_COUNT + 1))
+            echo "Resolved: $file"
+          done
+
+          echo ""
+          echo "Resolved $RESOLVED_COUNT files"
+
+          if [ -n "$FAILED_FILES" ]; then
+            echo "Failed to resolve:$FAILED_FILES"
+            echo "resolution=partial" >> "$GITHUB_OUTPUT"
+          else
+            echo "resolution=full" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit and push resolved merge
+        if: steps.merge.outputs.result == 'conflict'
+        id: resolution
+        run: |
+          # Check if there are still conflict markers in any staged file
+          REMAINING=$(git diff --cached --name-only | xargs grep -l '<<<<<<< HEAD' 2>/dev/null || true)
+
+          if [ -n "$REMAINING" ]; then
+            echo "Conflict markers still present in: $REMAINING"
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+          else
+            git commit --no-edit
+            echo "status=resolved" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push auto-resolved merge
+        if: steps.merge.outputs.result == 'conflict' && steps.resolution.outputs.status == 'resolved'
         run: |
           BRANCH="auto/sync-upstream-$(date +%Y%m%d-%H%M%S)"
           git checkout -b "$BRANCH"
-          # Apply upstream as a branch so the diff is reviewable
-          git merge upstream/main --no-edit || true
-
-          # Stage the conflict markers so the branch can be pushed
-          git add -A
-          git commit -m "chore: upstream sync with conflicts (needs manual resolution)" || true
           git push origin "$BRANCH"
+          echo "BRANCH=$BRANCH" >> "$GITHUB_ENV"
+
+      - name: Create PR for auto-resolved merge
+        if: steps.merge.outputs.result == 'conflict' && steps.resolution.outputs.status == 'resolved'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get list of files that had conflicts
+          CONFLICTED=$(git diff --name-only HEAD~1 HEAD)
 
           gh pr create \
-            --title "chore: sync upstream (conflicts need resolution)" \
+            --title "chore: sync upstream (auto-resolved by Claude)" \
+            --body "$(cat <<EOF
+          ## Upstream sync — auto-resolved
+
+          Merge from \`garrytan/gstack\` main had conflicts. Claude resolved them automatically.
+
+          ### Files that had conflicts
+          $(echo "$CONFLICTED" | sed 's/^/- `/' | sed 's/$/`/')
+
+          ### What to verify
+          - [ ] Orch handoff sections are intact in plan-ceo-review and plan-eng-review
+          - [ ] Fork-specific URLs (jeffdhooton/gstack) are preserved
+          - [ ] No conflict markers remain
+          - [ ] Upstream changes are correctly incorporated
+
+          > Review the diff carefully — this was an AI-resolved merge.
+
+          🤖 Auto-resolved by Claude (sync-upstream workflow)
+          EOF
+          )" \
+            --base main \
+            --head "$BRANCH"
+
+      - name: Fallback — unresolvable conflicts
+        if: steps.merge.outputs.result == 'conflict' && steps.resolution.outputs.status == 'failed'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Abort the bad merge and create a branch with the raw conflict
+          git reset --hard HEAD
+          git checkout -b "auto/sync-conflict-$(date +%Y%m%d-%H%M%S)"
+          git merge upstream/main --no-edit || true
+          git add -A
+          git commit -m "chore: upstream sync — unresolved conflicts (Claude could not resolve)" || true
+          git push origin HEAD
+
+          gh pr create \
+            --title "chore: sync upstream (MANUAL resolution needed)" \
             --body "$(cat <<'EOF'
           ## Upstream sync — manual resolution needed
 
-          Automatic merge from `garrytan/gstack` main had conflicts.
-
-          The conflicting files likely overlap with our orch customizations in:
-          - `plan-ceo-review/SKILL.md.tmpl`
-          - `plan-eng-review/SKILL.md.tmpl`
-          - `scripts/gen-skill-docs.ts`
-          - `orch/`
+          Automatic merge from `garrytan/gstack` main had conflicts that Claude
+          could not resolve automatically. Conflict markers are present in the diff.
 
           ### How to resolve
           1. Check out this branch locally
           2. Resolve the conflict markers (`<<<<<<<` / `>>>>>>>`)
           3. Ensure orch handoff sections are preserved
-          4. Merge the PR
+          4. Ensure fork URLs (jeffdhooton/gstack) stay in update-check and upgrade paths
+          5. Merge the PR
 
           🤖 Auto-generated by sync-upstream workflow
           EOF
           )" \
             --base main \
-            --head "$BRANCH"
+            --head "$(git rev-parse --abbrev-ref HEAD)"
