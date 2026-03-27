@@ -7,6 +7,8 @@ bun install          # install dependencies
 bun test             # run free tests (browse + snapshot + skill validation)
 bun run test:evals   # run paid evals: LLM judge + E2E (diff-based, ~$4/run max)
 bun run test:evals:all  # run ALL paid evals regardless of diff
+bun run test:gate    # run gate-tier tests only (CI default, blocks merge)
+bun run test:periodic  # run periodic-tier tests only (weekly cron / manual)
 bun run test:e2e     # run E2E tests only (diff-based, ~$3.85/run max)
 bun run test:e2e:all # run ALL E2E tests regardless of diff
 bun run eval:select  # show which tests would run based on current diff
@@ -29,8 +31,16 @@ against the previous run.
 **Diff-based test selection:** `test:evals` and `test:e2e` auto-select tests based
 on `git diff` against the base branch. Each test declares its file dependencies in
 `test/helpers/touchfiles.ts`. Changes to global touchfiles (session-runner, eval-store,
-llm-judge, gen-skill-docs) trigger all tests. Use `EVALS_ALL=1` or the `:all` script
+touchfiles.ts itself) trigger all tests. Use `EVALS_ALL=1` or the `:all` script
 variants to force all tests. Run `eval:select` to preview which tests would run.
+
+**Two-tier system:** Tests are classified as `gate` or `periodic` in `E2E_TIERS`
+(in `test/helpers/touchfiles.ts`). CI runs only gate tests (`EVALS_TIER=gate`);
+periodic tests run weekly via cron or manually. Use `EVALS_TIER=gate` or
+`EVALS_TIER=periodic` to filter. When adding new E2E tests, classify them:
+1. Safety guardrail or deterministic functional test? -> `gate`
+2. Quality benchmark, Opus model test, or non-deterministic? -> `periodic`
+3. Requires external service (Codex, Gemini)? -> `periodic`
 
 ## Testing
 
@@ -161,9 +171,28 @@ symlink or a real copy. If it's a symlink to your working directory, be aware th
 - During large refactors, remove the symlink (`rm .claude/skills/gstack`) so the
   global install at `~/.claude/skills/gstack/` is used instead
 
+**Prefix setting:** Skill symlinks use either short names (`qa -> gstack/qa`) or
+namespaced (`gstack-qa -> gstack/qa`), controlled by `skill_prefix` in
+`~/.gstack/config.yaml`. When vendoring into a project, run `./setup` after
+symlinking to create the per-skill symlinks with your preferred naming. Pass
+`--no-prefix` or `--prefix` to skip the interactive prompt.
+
 **For plan reviews:** When reviewing plans that modify skill templates or the
 gen-skill-docs pipeline, consider whether the changes should be tested in isolation
 before going live (especially if the user is actively using gstack in other windows).
+
+## Compiled binaries — NEVER commit browse/dist/
+
+The `browse/dist/` directory contains compiled Bun binaries (`browse`, `find-browse`,
+~58MB each). These are Mach-O arm64 only — they do NOT work on Linux, Windows, or
+Intel Macs. The `./setup` script already builds from source for every platform, so
+the checked-in binaries are redundant. They are tracked by git due to a historical
+mistake and should eventually be removed with `git rm --cached`.
+
+**NEVER stage or commit these files.** They show up as modified in `git status`
+because they're tracked despite `.gitignore` — ignore them. When staging files,
+always use specific filenames (`git add file1 file2`) — never `git add .` or
+`git add -A`, which will accidentally include the binaries.
 
 ## Commit style
 
@@ -274,6 +303,30 @@ The full E2E suite can take 30-45 minutes. That's 10-15 polling cycles. Do all o
 them. Report progress at each check (which tests passed, which are running, any
 failures so far). The user wants to see the run complete, not a promise that
 you'll check later.
+
+## E2E test fixtures: extract, don't copy
+
+**NEVER copy a full SKILL.md file into an E2E test fixture.** SKILL.md files are
+1500-2000 lines. When `claude -p` reads a file that large, context bloat causes
+timeouts, flaky turn limits, and tests that take 5-10x longer than necessary.
+
+Instead, extract only the section the test actually needs:
+
+```typescript
+// BAD — agent reads 1900 lines, burns tokens on irrelevant sections
+fs.copyFileSync(path.join(ROOT, 'ship', 'SKILL.md'), path.join(dir, 'ship-SKILL.md'));
+
+// GOOD — agent reads ~60 lines, finishes in 38s instead of timing out
+const full = fs.readFileSync(path.join(ROOT, 'ship', 'SKILL.md'), 'utf-8');
+const start = full.indexOf('## Review Readiness Dashboard');
+const end = full.indexOf('\n---\n', start);
+fs.writeFileSync(path.join(dir, 'ship-SKILL.md'), full.slice(start, end > start ? end : undefined));
+```
+
+Also when running targeted E2E tests to debug failures:
+- Run in **foreground** (`bun test ...`), not background with `&` and `tee`
+- Never `pkill` running eval processes and restart — you lose results and waste money
+- One clean run beats three killed-and-restarted runs
 
 ## Deploying to the active skill
 
