@@ -170,7 +170,7 @@ Each skill feeds into the next. `/office-hours` writes a design doc that `/plan-
 | `/health` | **Code Quality Dashboard** | Wraps your type checker, linter, test runner, dead code detector. Weighted 0-10 score with trends over time. |
 | `/document-release` | **Technical Writer** | Update all project docs to match what you just shipped. Catches stale READMEs automatically. |
 | `/retro` | **Eng Manager** | Team-aware weekly retro. Per-person breakdowns, shipping streaks, test health trends, growth opportunities. `/retro global` runs across all your projects and AI tools (Claude Code, Codex, Gemini). |
-| `/browse` | **QA Engineer** | Give the agent eyes. Real Chromium browser, real clicks, real screenshots. ~100ms per command. `$B connect` launches your real Chrome as a headed window — watch every action live. |
+| `/browse` | **QA Engineer** | Give the agent eyes. Real Chromium browser, real clicks, real screenshots. ~100ms per command. `/open-gstack-browser` launches GStack Browser with sidebar, anti-bot stealth, and auto model routing. |
 | `/setup-browser-cookies` | **Session Manager** | Import cookies from your real browser (Chrome, Arc, Brave, Edge) into the headless session. Test authenticated pages. |
 | `/autoplan` | **Review Pipeline** | One command, fully reviewed plan. Runs CEO → design → eng review automatically with encoded decision principles. Surfaces only taste decisions for your approval. |
 | `/learn` | **Memory** | Manage what gstack learned across sessions. Review, search, prune, and export project-specific patterns, pitfalls, and preferences. Learnings compound across sessions so gstack gets smarter on your codebase over time. |
@@ -188,7 +188,7 @@ Each skill feeds into the next. `/office-hours` writes a design doc that `/plan-
 | `/freeze` | **Edit Lock** — restrict file edits to one directory. Prevents accidental changes outside scope while debugging. |
 | `/guard` | **Full Safety** — `/careful` + `/freeze` in one command. Maximum safety for prod work. |
 | `/unfreeze` | **Unlock** — remove the `/freeze` boundary. |
-| `/connect-chrome` | **Chrome Controller** — launch Chrome with the Side Panel extension. Watch every action live, inspect CSS on any element, clean up pages, and take screenshots. Each tab gets its own agent. |
+| `/open-gstack-browser` | **GStack Browser** — launch GStack Browser with sidebar, anti-bot stealth, auto model routing (Sonnet for actions, Opus for analysis), one-click cookie import, and Claude Code integration. Clean up pages, take smart screenshots, edit CSS, and pass info back to your terminal. |
 | `/setup-deploy` | **Deploy Configurator** — one-time setup for `/land-and-deploy`. Detects your platform, production URL, and deploy commands. |
 | `/gstack-upgrade` | **Self-Updater** — upgrade gstack to latest. Detects global vs vendored install, syncs both, shows what changed. |
 
@@ -208,9 +208,15 @@ Each skill feeds into the next. `/office-hours` writes a design doc that `/plan-
 
 **Safety guardrails on demand.** `/careful` warns before destructive commands. `/freeze` locks edits to one directory. `/guard` activates both. `/investigate` auto-freezes to the module being investigated.
 
+**Real browser mode.** `/open-gstack-browser` launches GStack Browser, an AI-controlled Chromium with anti-bot stealth, custom branding, and the sidebar extension baked in. Sites like Google and NYTimes work without captchas. The menu bar says "GStack Browser" instead of "Chrome for Testing." Your regular Chrome stays untouched. All existing browse commands work unchanged. `$B disconnect` returns to headless. The browser stays alive as long as the window is open... no idle timeout killing it while you're working.
+
 **Codebase index.** `/index` generates compact reference files (routes, models, pages, components, lib exports, config) that replace 50K+ tokens of AI exploration per conversation. Works with any framework. A standalone `gstack-reindex` script keeps the index fresh via git pre-commit hook — zero cost, ~1s.
 
+**Sidebar agent — your AI browser assistant.** Type natural language in the Chrome side panel and a child Claude instance executes it. "Navigate to the settings page and screenshot it." "Fill out this form with test data." "Go through every item in this list and extract the prices." The sidebar auto-routes to the right model: Sonnet for fast actions (click, navigate, screenshot) and Opus for reading and analysis. Each task gets up to 5 minutes. The sidebar agent runs in an isolated session, so it won't interfere with your main Claude Code window. One-click cookie import right from the sidebar footer.
+
 **Cross-session messaging.** `/inbox` lets concurrent Claude Code sessions talk to each other. Structured message types (`unblock`, `handoff`, `question`, `info`) with project-level targeting. A PreToolUse hook surfaces new messages inline so sessions never miss a notification. Work claims prevent double-booking.
+
+**Personal automation.** The sidebar agent isn't just for dev workflows. Example: "Browse my kid's school parent portal and add all the other parents' names, phone numbers, and photos to my Google Contacts." Two ways to get authenticated: (1) log in once in the headed browser, your session persists, or (2) click the "cookies" button in the sidebar footer to import cookies from your real Chrome. Once authenticated, Claude navigates the directory, extracts the data, and creates the contacts.
 
 **Performance profiling.** `/perf` profiles response times, database queries, memory, CPU, and bundle sizes across any framework.
 
@@ -276,7 +282,7 @@ Data is stored in [Supabase](https://supabase.com) (open source Firebase alterna
 Use /browse from gstack for all web browsing. Never use mcp__claude-in-chrome__* tools.
 Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-design-review,
 /design-consultation, /design-ref, /design-shotgun, /design-html, /review, /ship, /land-and-deploy,
-/canary, /benchmark, /browse, /connect-chrome, /qa, /qa-only, /qa-backend, /test-gen,
+/canary, /benchmark, /browse, /open-gstack-browser, /qa, /qa-only, /qa-backend, /test-gen,
 /design-review, /setup-browser-cookies, /setup-deploy, /retro, /investigate,
 /document-release, /codex, /cso, /env-sync, /deps, /autoplan, /build, /orch, /careful,
 /freeze, /guard, /unfreeze, /gstack-upgrade, /learn, /index, /inbox, /pair, /checkpoint,
