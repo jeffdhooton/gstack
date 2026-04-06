@@ -153,12 +153,13 @@ Each skill feeds into the next. `/office-hours` writes a design doc that `/plan-
 | `/review` | **Staff Engineer** | Find the bugs that pass CI but blow up in production. Runs your project's linters and SAST tools first (ESLint, Semgrep, ruff, Brakeman, etc.), then layers LLM judgment on top for what tools can't catch. Auto-fixes the obvious ones. |
 | `/investigate` | **Debugger** | Systematic root-cause debugging. Iron Law: no fixes without investigation. Traces data flow, tests hypotheses, stops after 3 failed fixes. |
 | `/design-review` | **Designer Who Codes** | Same audit as /plan-design-review, then fixes what it finds. Atomic commits, before/after screenshots. |
-| `/design-shotgun` | **Design Explorer** | Generate multiple AI design variants, open a comparison board in your browser, and iterate until you approve a direction. Taste memory biases toward your preferences. |
-| `/design-html` | **Design Engineer** | Generates production-quality HTML with Pretext for computed text layout. Works with approved mockups, CEO plans, design reviews, or from scratch. Text reflows on resize, heights adjust to content. Smart API routing picks the right Pretext patterns per design type. Framework detection for React/Svelte/Vue. |
+| `/design-shotgun` | **Design Explorer** | "Show me options." Generates 4-6 AI mockup variants, opens a comparison board in your browser, collects your feedback, and iterates. Taste memory learns what you like. Repeat until you love something, then hand it to `/design-html`. |
+| `/design-html` | **Design Engineer** | Turn a mockup into production HTML that actually works. Pretext computed layout: text reflows, heights adjust, layouts are dynamic. 30KB, zero deps. Detects React/Svelte/Vue. Smart API routing per design type (landing page vs dashboard vs form). The output is shippable, not a demo. |
 | `/qa` | **QA Lead** | Test your app, find bugs, fix them with atomic commits, re-verify. Auto-generates regression tests for every fix. |
 | `/qa-only` | **QA Reporter** | Same methodology as /qa but report only. Pure bug report without code changes. |
 | `/qa-backend` | **Backend QA** | API contract testing, database health, slow query profiling, auth boundary verification. For when /qa (browser) is overkill. |
 | `/test-gen` | **Test Writer** | Reads your existing tests to learn the project's style, finds uncovered code, generates matching tests. Prioritizes by risk. |
+| `/pair-agent` | **Multi-Agent Coordinator** | Share your browser with any AI agent. One command, one paste, connected. Works with OpenClaw, Hermes, Codex, Cursor, or anything that can curl. Each agent gets its own tab. Auto-launches headed mode so you watch everything. Auto-starts ngrok tunnel for remote agents. Scoped tokens, tab isolation, rate limiting, activity attribution. |
 | `/cso` | **Chief Security Officer** | OWASP Top 10 + STRIDE threat model. Runs deterministic SAST tools first (bandit, gosec, Semgrep, etc.), then layers LLM analysis. Zero-noise: 17 false positive exclusions, 8/10+ confidence gate. Each finding includes a concrete exploit scenario. |
 | `/env-sync` | **Env Auditor** | Finds env vars used in code but missing from .env.example, and stale vars nobody references. Works with any framework. |
 | `/deps` | **Dependency Auditor** | Vulnerability scan, outdated packages, unused deps, license audit. Wraps npm/composer/bundle/pip/go/cargo audit tools. |
@@ -200,6 +201,12 @@ Each skill feeds into the next. `/office-hours` writes a design doc that `/plan-
 
 **Plan-to-code pipeline.** `/build` reads your plan, analyzes whether the work is parallelizable, and either routes to `/orch` (multi-agent via tmux) or builds in-session. Auto-detects build/test/lint commands. Implements step by step, tests at checkpoints, iterates until green.
 
+**Design is at the heart.** `/design-consultation` builds your design system from scratch, researches what's out there, proposes creative risks, and writes `DESIGN.md`. But the real magic is the shotgun-to-HTML pipeline.
+
+**`/design-shotgun` is how you explore.** You describe what you want. It generates 4-6 AI mockup variants using GPT Image. Then it opens a comparison board in your browser with all variants side by side. You pick favorites, leave feedback ("more whitespace", "bolder headline", "lose the gradient"), and it generates a new round. Repeat until you love something. Taste memory kicks in after a few rounds so it starts biasing toward what you actually like. No more describing your vision in words and hoping the AI gets it. You see options, pick the good ones, and iterate visually.
+
+**`/design-html` makes it real.** Take that approved mockup (from `/design-shotgun`, a CEO plan, a design review, or just a description) and turn it into production-quality HTML/CSS. Not the kind of AI HTML that looks fine at one viewport width and breaks everywhere else. This uses Pretext for computed text layout: text actually reflows on resize, heights adjust to content, layouts are dynamic. 30KB overhead, zero dependencies. It detects your framework (React, Svelte, Vue) and outputs the right format. Smart API routing picks different Pretext patterns depending on whether it's a landing page, dashboard, form, or card layout. The output is something you'd actually ship, not a demo.
+
 **Real browser testing.** `/qa` opens a real Chromium browser, clicks through flows, finds bugs, fixes them with atomic commits, and generates regression tests. `$B connect` launches your actual Chrome as a headed window — watch every action live.
 
 **Smart review routing.** gstack tracks what reviews have been run, figures out what's appropriate for the diff, and routes accordingly. The Review Readiness Dashboard shows where you stand before you ship.
@@ -221,6 +228,8 @@ Each skill feeds into the next. `/office-hours` writes a design doc that `/plan-
 **Performance profiling.** `/perf` profiles response times, database queries, memory, CPU, and bundle sizes across any framework.
 
 **Pair programming.** `/pair` coordinates two Claude Code sessions on the same task — one drives, one reviews in real-time via `/inbox`.
+
+**`/pair-agent` is cross-agent coordination.** You're in Claude Code. You also have OpenClaw running. Or Hermes. Or Codex. You want them both looking at the same website. Type `/pair-agent`, pick your agent, and a GStack Browser window opens so you can watch. The skill prints a block of instructions. Paste that block into the other agent's chat. It exchanges a one-time setup key for a session token, creates its own tab, and starts browsing. You see both agents working in the same browser, each in their own tab, neither able to interfere with the other. If ngrok is installed, the tunnel starts automatically so the other agent can be on a completely different machine. Same-machine agents get a zero-friction shortcut that writes credentials directly. This is the first time AI agents from different vendors can coordinate through a shared browser with real security: scoped tokens, tab isolation, rate limiting, domain restrictions, and activity attribution.
 
 **Brand design library.** `/design-ref` loads design systems from 55+ companies (Stripe, Airbnb, Apple, Linear, Figma, etc.) as DESIGN.md references. Pick a brand, apply its tokens to your project, and every design skill uses them automatically.
 
@@ -337,9 +346,9 @@ Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-desig
 /design-consultation, /design-ref, /design-shotgun, /design-html, /review, /ship, /land-and-deploy,
 /canary, /benchmark, /browse, /open-gstack-browser, /qa, /qa-only, /qa-backend, /test-gen,
 /design-review, /setup-browser-cookies, /setup-deploy, /retro, /investigate,
-/document-release, /codex, /cso, /env-sync, /deps, /autoplan, /build, /orch, /careful,
-/freeze, /guard, /unfreeze, /gstack-upgrade, /learn, /index, /inbox, /pair, /checkpoint,
-/health, /perf.
+/document-release, /codex, /cso, /env-sync, /deps, /autoplan, /build, /orch, /pair-agent,
+/careful, /freeze, /guard, /unfreeze, /gstack-upgrade, /learn, /index, /inbox, /pair,
+/checkpoint, /health, /perf.
 ```
 
 ## License

@@ -106,6 +106,144 @@ Community security wave: 8 PRs from 4 contributors, every fix credited as co-aut
 - State load filters cookies from localhost, .internal, and metadata domains.
 - Telemetry sync logs upsert errors from installation tracking.
 
+## [0.15.14.0] - 2026-04-05
+
+### Fixed
+
+- **`gstack-team-init` now detects and removes vendored gstack copies.** When you run `gstack-team-init` inside a repo that has gstack vendored at `.claude/skills/gstack/`, it automatically removes the vendored copy, untracks it from git, and adds it to `.gitignore`. No more stale vendored copies shadowing the global install.
+- **`/gstack-upgrade` respects team mode.** Step 4.5 now checks the `team_mode` config. In team mode, vendored copies are removed instead of synced, since the global install is the single source of truth.
+- **`team_mode` config key.** `./setup --team` and `./setup --no-team` now set a dedicated `team_mode` config key so the upgrade skill can reliably distinguish team mode from just having auto-upgrade enabled.
+
+## [0.15.13.0] - 2026-04-04 — Team Mode
+
+Teams can now keep every developer on the same gstack version automatically. No more vendoring 342 files into your repo. No more version drift across branches. No more "who upgraded gstack last?" Slack threads. One command, every developer is current.
+
+Hat tip to Jared Friedman for the design.
+
+### Added
+
+- **`./setup --team`.** Registers a `SessionStart` hook in `~/.claude/settings.json` that auto-updates gstack at the start of each Claude Code session. Runs in background (zero latency), throttled to once/hour, network-failure-safe, completely silent. `./setup --no-team` reverses it.
+- **`./setup -q` / `--quiet`.** Suppresses all informational output. Used by the session-update hook but also useful for CI and scripted installs.
+- **`gstack-team-init` command.** Generates repo-level bootstrap files in two flavors: `optional` (gentle CLAUDE.md suggestion, one-time offer per developer) or `required` (CLAUDE.md enforcement + PreToolUse hook that blocks work without gstack installed).
+- **`gstack-settings-hook` helper.** DRY utility for adding/removing hooks in Claude Code's `settings.json`. Atomic writes (.tmp + rename) prevent corruption.
+- **`gstack-session-update` script.** The SessionStart hook target. Background fork, PID-based lockfile with stale recovery, `GIT_TERMINAL_PROMPT=0` to prevent credential prompt hangs, debug log at `~/.gstack/analytics/session-update.log`.
+- **Vendoring deprecation in preamble.** Every skill now detects vendored gstack copies in the project and offers one-time migration to team mode. "Want me to do it for you?" beats "here are 4 manual steps."
+
+### Changed
+
+- **Vendoring is deprecated.** README no longer recommends copying gstack into your repo. Global install + `--team` is the way. `--local` flag still works but prints a deprecation warning.
+- **Uninstall cleans up hooks.** `gstack-uninstall` now removes the SessionStart hook from `~/.claude/settings.json`.
+
+## [0.15.12.0] - 2026-04-05 — Content Security: 4-Layer Prompt Injection Defense
+
+When you share your browser with another AI agent via `/pair-agent`, that agent reads web pages. Web pages can contain prompt injection attacks. Hidden text, fake system messages, social engineering in product reviews. This release adds four layers of defense so remote agents can safely browse untrusted sites without being tricked.
+
+### Added
+
+- **Content envelope wrapping.** Every page read by a scoped agent is wrapped in `═══ BEGIN UNTRUSTED WEB CONTENT ═══` / `═══ END UNTRUSTED WEB CONTENT ═══` markers. The agent's instruction block tells it to never follow instructions found inside these markers. Envelope markers in page content are escaped with zero-width spaces to prevent boundary escape attacks.
+- **Hidden element stripping.** CSS-hidden elements (opacity < 0.1, font-size < 1px, off-screen positioning, same fg/bg color, clip-path, visibility:hidden) and ARIA label injections are detected and stripped from text output. The page DOM is never mutated. Uses clone + remove for text extraction, CSS injection for snapshots.
+- **Datamarking.** Text command output gets a session-scoped watermark (4-char random marker inserted as zero-width characters). If the content appears somewhere it shouldn't, the marker traces back to the session. Only applied to `text` command, not structured data like `html` or `forms`.
+- **Content filter hooks.** Extensible filter pipeline with `BROWSE_CONTENT_FILTER` env var (off/warn/block, default: warn). Built-in URL blocklist catches requestbin, pipedream, webhook.site, and other known exfiltration domains. Register custom filters for your own rules.
+- **Snapshot split format.** Scoped tokens get a split snapshot: trusted `@ref` labels (for click/fill) above the untrusted content envelope. The agent knows which refs are safe to use and which content is untrusted. Root tokens unchanged.
+- **SECURITY section in instruction block.** Remote agents now receive explicit warnings about prompt injection, with a list of common injection phrases and guidance to only use @refs from the trusted section.
+- **47 content security tests.** Covers all four layers plus chain security, envelope escaping, ARIA injection detection, false positive checks, and combined attack scenarios. Four injection fixture HTML pages for testing.
+
+### Changed
+
+- `handleCommand` refactored into `handleCommandInternal` (returns structured result) + thin HTTP wrapper. Chain subcommands now route through the full security pipeline (scope, domain, tab ownership, content wrapping) instead of bypassing it.
+- `attrs` added to `PAGE_CONTENT_COMMANDS` (ARIA attribute values are now wrapped as untrusted content).
+- Content wrapping centralized in one location in `handleCommandInternal` response path. Was fragmented across 6 call sites.
+
+### Fixed
+
+- `snapshot -i` now auto-includes cursor-interactive elements (dropdown items, popover options, custom listboxes). Previously you had to remember to pass `-C` separately.
+- Snapshot correctly captures items inside floating containers (React portals, Radix Popover, Floating UI) even when they have ARIA roles.
+- Dropdown/menu items with `role="option"` or `role="menuitem"` inside popovers are now captured and tagged with `popover-child`.
+- Chain commands now check domain restrictions on `newtab` (was only checking `goto`).
+- Nested chain commands rejected (recursion guard prevents chain-within-chain).
+- Rate limiting exemption for chain subcommands (chain counts as 1 request, not N).
+- Tunnel liveness verification: `/pair-agent` now probes the tunnel before using it, preventing dead tunnel URLs from reaching remote agents.
+- `/health` serves auth token on localhost for extension authentication (stripped when tunneled).
+- All 16 pre-existing test failures fixed (pair-agent skill compliance, golden file baselines, host smoke tests, relink test timeouts).
+
+## [0.15.11.0] - 2026-04-05
+
+### Changed
+- `/ship` re-runs now execute every verification step (tests, coverage audit, review, adversarial, TODOS, document-release) regardless of prior runs. Only actions (push, PR creation, VERSION bump) are idempotent. Re-running `/ship` means "run the whole checklist again."
+- `/ship` now runs the full Review Army specialist dispatch (testing, maintainability, security, performance, data-migration, api-contract, design, red-team) during pre-landing review, matching `/review`'s depth.
+
+### Added
+- Cross-review finding dedup in `/ship`: findings the user already skipped in a prior `/review` or `/ship` are automatically suppressed on re-run (unless the relevant code changed).
+- PR body refresh after `/document-release`: the PR body is re-edited to include the docs commit, so it always reflects the truly final state.
+
+### Fixed
+- Review Army diff size heuristic now counts insertions + deletions (was insertions-only, which missed deletion-heavy refactors).
+
+### For contributors
+- Extracted cross-review dedup to shared `{{CROSS_REVIEW_DEDUP}}` resolver (DRY between `/review` and `/ship`).
+- Review Army step numbers adapt per-skill via `ctx.skillName` (ship: 3.55/3.56, review: 4.5/4.6), including prose references.
+- Added 3 regression guard tests for new ship template content.
+
+## [0.15.10.0] - 2026-04-05 — Native OpenClaw Skills + ClawHub Publishing
+
+Four methodology skills you can install directly in your OpenClaw agent via ClawHub, no Claude Code session needed. Your agent runs them conversationally via Telegram.
+
+### Added
+
+- **4 native OpenClaw skills on ClawHub.** Install with `clawhub install gstack-openclaw-office-hours gstack-openclaw-ceo-review gstack-openclaw-investigate gstack-openclaw-retro`. Pure methodology, no gstack infrastructure. Office hours (375 lines), CEO review (193), investigate (136), retro (301).
+- **AGENTS.md dispatch fix.** Three behavioral rules that stop Wintermute from telling you to open Claude Code manually. It now spawns sessions itself. Ready-to-paste section at `openclaw/agents-gstack-section.md`.
+
+### Changed
+
+- OpenClaw `includeSkills` cleared. Native ClawHub skills replace the bloated generated versions (was 10-25K tokens each, now 136-375 lines of pure methodology).
+- docs/OPENCLAW.md updated with dispatch routing rules and ClawHub install references.
+
+## [0.15.9.0] - 2026-04-05 — OpenClaw Integration v2
+
+You can now connect gstack to OpenClaw as a methodology source. OpenClaw spawns Claude Code sessions natively via ACP, and gstack provides the planning discipline and thinking frameworks that make those sessions better.
+
+### Added
+
+- **gstack-lite planning discipline.** A 15-line CLAUDE.md that turns every spawned Claude Code session into a disciplined builder: read first, plan, resolve ambiguity, self-review, report. A/B tested: 2x time, meaningfully better output.
+- **gstack-full pipeline template.** For complete feature builds, chains /autoplan, implement, and /ship into one autonomous flow. Your orchestrator drops a task, gets back a PR.
+- **4 native methodology skills for OpenClaw.** Office hours, CEO review, investigate, and retro, adapted for conversational work that doesn't need a coding environment.
+- **4-tier dispatch routing.** Simple (no gstack), Medium (gstack-lite), Heavy (specific skill), Full (complete pipeline). Documented in docs/OPENCLAW.md with routing guide for OpenClaw's AGENTS.md.
+- **Spawned session detection.** Set OPENCLAW_SESSION env var and gstack auto-skips interactive prompts, focusing on task completion. Works for any orchestrator, not just OpenClaw.
+- **includeSkills host config field.** Union logic with skipSkills (include minus skip). Lets hosts generate only the skills they need instead of everything-minus-a-list.
+- **docs/OPENCLAW.md.** Full architecture doc explaining how gstack integrates with OpenClaw, the prompt-as-bridge model, and what we're NOT building (no daemon, no protocol, no Clawvisor).
+
+### Changed
+
+- OpenClaw host config updated: generates only 4 native skills instead of all 31. Removed staticFiles.SOUL.md (referenced non-existent file).
+- Setup script now prints redirect message for `--host openclaw` instead of attempting full installation.
+
+## [0.15.8.1] - 2026-04-05 — Community PR Triage + Error Polish
+
+Closed 12 redundant community PRs, merged 2 ready PRs (#798, #776), and expanded the friendly OpenAI error to every design command. If your org isn't verified, you now get a clear message with the right URL instead of a raw JSON dump, no matter which design command you run.
+
+### Fixed
+
+- **Friendly OpenAI org error on all design commands.** Previously only `$D generate` showed a user-friendly message when your org wasn't verified. Now `$D evolve`, `$D iterate`, `$D variants`, and `$D check` all show the same clear message with the verification URL.
+
+### Added
+
+- **>128KB regression test for Codex session discovery.** Documents the current buffer limitation so future Codex versions with larger session_meta will surface cleanly instead of silently breaking.
+
+### For contributors
+
+- Closed 12 redundant community PRs (6 Gonzih security fixes shipped in v0.15.7.0, 6 stedfn duplicates). Kept #752 open (symlink gap in design serve). Thank you @Gonzih, @stedfn, @itstimwhite for the contributions.
+
+## [0.15.8.0] - 2026-04-04 — Smarter Reviews
+
+Code reviews now learn from your decisions. Skip a finding once and it stays quiet until the code changes. Specialists auto-suggest test stubs alongside their findings. And silent specialists that never find anything get auto-gated so reviews stay fast.
+
+### Added
+
+- **Cross-review finding dedup.** When you skip a finding in one review, gstack remembers. On the next review, if the relevant code hasn't changed, the finding stays suppressed. No more re-skipping the same intentional pattern every PR.
+- **Test stub suggestions.** Specialists can now include a skeleton test alongside each finding. The test uses your project's detected framework (Jest, Vitest, RSpec, pytest, Go test). Findings with test stubs get surfaced as ASK items so you decide whether to create the test.
+- **Adaptive specialist gating.** Specialists that have been dispatched 10+ times with zero findings get auto-gated. Security and data-migration are exempt (insurance policies always run). Force any specialist back with `--security`, `--performance`, etc.
+- **Per-specialist stats in review log.** Every review now records which specialists ran, how many findings each produced, and which were skipped or gated. This powers the adaptive gating and gives /retro richer data.
+
 ## [0.15.7.0] - 2026-04-05 — Security Wave 1
 
 Fourteen fixes for the security audit (#783). Design server no longer binds all interfaces. Path traversal, auth bypass, CORS wildcard, world-readable files, prompt injection, and symlink race conditions all closed. Community PRs from @Gonzih and @garagon included.
