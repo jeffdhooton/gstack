@@ -13,6 +13,10 @@ import * as path from 'path';
 import { TEMP_DIR, isPathWithin } from './platform';
 import { inspectElement, formatInspectorResult, getModificationHistory } from './cdp-inspector';
 
+// Redaction patterns for sensitive cookie/storage values — exported for test coverage
+export const SENSITIVE_COOKIE_NAME = /(^|[_.-])(token|secret|key|password|credential|auth|jwt|session|csrf|sid)($|[_.-])|api.?key/i;
+export const SENSITIVE_COOKIE_VALUE = /^(eyJ|sk-|sk_live_|sk_test_|pk_live_|pk_test_|rk_live_|sk-ant-|ghp_|gho_|github_pat_|xox[bpsa]-|AKIA[A-Z0-9]{16}|AIza|SG\.|Bearer\s|sbp_)/;
+
 /** Detect await keyword, ignoring comments. Accepted risk: await in string literals triggers wrapping (harmless). */
 function hasAwait(code: string): boolean {
   const stripped = code.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
@@ -300,13 +304,10 @@ export async function handleReadCommand(
 
     case 'cookies': {
       const cookies = await page.context().cookies();
-      // Redact values that look like secrets (same patterns as storage command)
-      const SENSITIVE_KEY = /(^|[_.-])(token|secret|key|password|credential|auth|jwt|session|csrf)($|[_.-])|api.?key/i;
-      const SENSITIVE_VALUE = /^(eyJ|sk-|sk_live_|sk_test_|pk_live_|pk_test_|rk_live_|sk-ant-|ghp_|gho_|github_pat_|xox[bpsa]-|AKIA[A-Z0-9]{16}|AIza|SG\.|Bearer\s|sbp_)/;
+      // Redact cookie values that look like secrets (consistent with storage redaction)
       const redacted = cookies.map(c => {
-        const v = String(c.value ?? '');
-        if (SENSITIVE_KEY.test(c.name) || SENSITIVE_VALUE.test(v)) {
-          return { ...c, value: `[REDACTED — ${v.length} chars]` };
+        if (SENSITIVE_COOKIE_NAME.test(c.name) || SENSITIVE_COOKIE_VALUE.test(c.value)) {
+          return { ...c, value: `[REDACTED — ${c.value.length} chars]` };
         }
         return c;
       });

@@ -87,7 +87,7 @@ function setConnected(healthData) {
   chrome.action.setBadgeBackgroundColor({ color: '#F59E0B' });
   chrome.action.setBadgeText({ text: ' ' });
 
-  // Broadcast health to popup and side panel (token delivered via targeted getToken handler, not broadcast)
+  // Broadcast health to popup and side panel (token excluded — use getToken message instead)
   chrome.runtime.sendMessage({ type: 'health', data: healthData }).catch((err) => {
     console.debug('[gstack bg] No listener for health broadcast:', err.message);
   });
@@ -315,9 +315,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  // Targeted token delivery — sidepanel requests token directly instead of broadcast
+  // Token delivered via targeted sendResponse, not broadcast — limits exposure.
+  // Only respond to extension pages (sidepanel/popup) — content scripts have
+  // sender.tab set, so reject those to prevent token access from injected contexts.
   if (msg.type === 'getToken') {
-    sendResponse({ token: authToken });
+    if (sender.tab) {
+      console.warn('[gstack] Rejected getToken from content script context');
+      sendResponse({ token: null });
+    } else {
+      sendResponse({ token: authToken });
+    }
     return true;
   }
 
