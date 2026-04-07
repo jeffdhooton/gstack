@@ -14,6 +14,23 @@ Pulled security hardening and browser stealth from upstream. 14 audit fixes plug
 - **Security wave 1 — 14 fixes.** URL validation blocks DNS rebinding (IPv4 + IPv6). Path traversal hardened with `realpath` resolution. Cookie values redacted in snapshots. Symlink creation is TOCTOU-safe. Design serve validates reload paths.
 - **Community security wave — 8 PRs.** Extension `getToken` rejects content script callers. Output path validation uses parent-directory `realpath`. Sensitive cookie names/values redacted via module-level exports. Health broadcasts exclude tokens.
 
+## [0.21.1] - 2026-04-05 — HTML-Only Design Skills
+
+Design skills no longer try to call the OpenAI image API. Every mockup, variant, and preview is now a self-contained HTML file with inline CSS, real fonts from Google Fonts, and real color palettes. Opens in any browser, no API key needed. Affects `/design-shotgun`, `/design-consultation`, `/design-html`, `/design-review`, `/plan-design-review`, and `/office-hours`.
+
+### Fixed
+
+- All 6 design skills default to HTML previews instead of attempting the design binary (which required OpenAI API access and frequently 403'd)
+- Removed all `$D generate`, `$D variants`, `$D compare`, `$D check`, `$D iterate`, `$D evolve`, and `$D extract` references from templates and resolvers
+- Fixed zsh-unsafe `for f in` glob pattern in design-shotgun and plan-design-review
+
+### Changed
+
+- `generateDesignSetup` resolver no longer checks for design binary, only browse binary
+- `generateDesignMockup` resolver generates HTML variant pages instead of PNG via API
+- `generateDesignShotgunLoop` resolver uses `open` + AskUserQuestion instead of `$D compare --serve` board
+- `/design-consultation` Phase 5 is now a single HTML preview path (no more Path A/Path B split)
+- `/design-html` reads HTML variants directly instead of calling `$D prompt --image`
 ## [0.21.0] - 2026-04-05 — Brand Design Library + Rebrand
 
 Say "design like Stripe" and mean it. `/design-ref` loads professional design systems from 55+ companies — Stripe, Airbnb, Apple, Linear, Figma, Notion, and more — as DESIGN.md references. Pick a brand, apply its tokens (colors, typography, spacing, components), and every design skill uses them automatically. Powered by [awesome-design-md](https://github.com/VoltAgent/awesome-design-md).
