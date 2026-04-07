@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # gstack setup — build browser binary + register skills with Claude Code / Codex
 set -e
+umask 077  # Restrict new files to owner-only (0o600 files, 0o700 dirs)
 
 if ! command -v bun >/dev/null 2>&1; then
   echo "Error: bun is required but not installed." >&2
@@ -288,11 +289,17 @@ link_claude_skill_dirs() {
         link_name="$skill_name"
       fi
       target="$skills_dir/$link_name"
-      # Create or update symlink; skip if a real file/directory exists
-      if [ -L "$target" ] || [ ! -e "$target" ]; then
-        ln -snf "gstack/$dir_name" "$target"
-        linked+=("$link_name")
+      # Upgrade old directory symlinks to real directories
+      if [ -L "$target" ]; then
+        rm -f "$target"
       fi
+      # Create real directory with symlinked SKILL.md (absolute path)
+      # Use mkdir -p unconditionally (idempotent) to avoid TOCTOU race
+      mkdir -p "$target"
+      # Validate target isn't a symlink before creating the link
+      if [ -L "$target/SKILL.md" ]; then rm "$target/SKILL.md"; fi
+      ln -snf "$gstack_dir/$dir_name/SKILL.md" "$target/SKILL.md"
+      linked+=("$link_name")
     fi
   done
   if [ ${#linked[@]} -gt 0 ]; then
@@ -604,6 +611,14 @@ if [ "$INSTALL_CLAUDE" -eq 1 ]; then
     # reads the correct (patched) name: values for symlink naming
     "$SOURCE_GSTACK_DIR/bin/gstack-patch-names" "$SOURCE_GSTACK_DIR" "$SKILL_PREFIX"
     link_claude_skill_dirs "$SOURCE_GSTACK_DIR" "$INSTALL_SKILLS_DIR"
+    # Backwards-compat alias: /connect-chrome → /open-gstack-browser
+    _OGB_LINK="$INSTALL_SKILLS_DIR/connect-chrome"
+    if [ "$SKILL_PREFIX" -eq 1 ]; then
+      _OGB_LINK="$INSTALL_SKILLS_DIR/gstack-connect-chrome"
+    fi
+    if [ -L "$_OGB_LINK" ] || [ ! -e "$_OGB_LINK" ]; then
+      ln -snf "gstack/open-gstack-browser" "$_OGB_LINK"
+    fi
     if [ "$LOCAL_INSTALL" -eq 1 ]; then
       echo "gstack ready (project-local)."
       echo "  skills: $INSTALL_SKILLS_DIR"
