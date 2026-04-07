@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.21.2] - 2026-04-06 — Upstream Security + GStack Browser
+
+Pulled security hardening and browser stealth from upstream. 14 audit fixes plug path traversal, URL validation, cookie leaks, and TOCTOU races in the browse binary. Community security wave adds extension token isolation, output path validation, and sensitive data redaction. Pair-agent gets a 4-layer prompt injection defense. GStack Browser ships anti-bot stealth for AI-controlled Chromium.
+
+### Added
+
+- **GStack Browser anti-bot stealth.** AI-controlled Chromium with stealth patches — avoids bot detection on sites that block headless browsers.
+- **Content security for pair-agent.** 4-layer prompt injection defense: input sanitization, output filtering, context isolation, and behavioral guardrails.
+
+### Fixed
+
+- **Security wave 1 — 14 fixes.** URL validation blocks DNS rebinding (IPv4 + IPv6). Path traversal hardened with `realpath` resolution. Cookie values redacted in snapshots. Symlink creation is TOCTOU-safe. Design serve validates reload paths.
+- **Community security wave — 8 PRs.** Extension `getToken` rejects content script callers. Output path validation uses parent-directory `realpath`. Sensitive cookie names/values redacted via module-level exports. Health broadcasts exclude tokens.
+
 ## [0.21.0] - 2026-04-05 — Brand Design Library + Rebrand
 
 Say "design like Stripe" and mean it. `/design-ref` loads professional design systems from 55+ companies — Stripe, Airbnb, Apple, Linear, Figma, Notion, and more — as DESIGN.md references. Pick a brand, apply its tokens (colors, typography, spacing, components), and every design skill uses them automatically. Powered by [awesome-design-md](https://github.com/VoltAgent/awesome-design-md).
