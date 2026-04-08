@@ -128,43 +128,103 @@ in a few sessions — patterns emerge over 3-5 sessions of similar work."
 
 When the user identifies a pattern they want to turn into a skill:
 
-1. Ask via AskUserQuestion:
-   - "What should this skill be called?" (short name, like `new-endpoint`)
-   - "Anything to add or change about the workflow?" (free text)
+### Step 1: Gather context
 
-2. Generate a minimal SKILL.md.tmpl skeleton:
+Ask via AskUserQuestion (one message, both questions):
+- "What should this skill be called?" (short kebab-case name, like `new-endpoint`)
+- "Anything to add or change about the workflow?" (free text, or "no" to use as-is)
 
-```markdown
----
-name: [skill-name]
-version: 0.1.0
-description: |
-  [One paragraph describing what this skill automates, based on the
-  observed pattern. End with (gstack)]
-allowed-tools:
-  - Bash
-  - Read
-  - Write
-  - Edit
-  - AskUserQuestion
----
+### Step 2: Reconstruct the workflow from the pattern
 
-# /[skill-name] — [Title]
+Go back to the pattern data from the analysis phase. For the identified pattern, you have:
+- The **tool sequence** (e.g., Read → Edit → Bash(test) → Edit → Bash(test))
+- The **files involved** and their roles
+- The **bash commands** that were run
+- The **frequency** and context of when this pattern appears
 
-[Description of what the skill does, written as instructions to Claude.]
+Use this to understand what the workflow actually accomplishes end-to-end.
 
-## Steps
+### Step 3: Generate the full SKILL.md.tmpl
 
-[Numbered steps derived from the observed tool sequence, written as
-natural language instructions with bash blocks where needed.]
+Write a complete, usable skill — NOT a skeleton with bracket placeholders. The skill
+should be ready to use immediately after generation.
+
+**Frontmatter:** Include the right `allowed-tools` based on what tools the pattern
+actually uses. Common sets:
+- Read-only workflows: `Bash, Read, Grep, Glob`
+- Edit workflows: `Bash, Read, Write, Edit, Grep, Glob`
+- Interactive workflows: add `AskUserQuestion`
+
+**Body structure:**
+
+1. **Role line** — one sentence: "You are a **[role]** who [does what]."
+
+2. **Analytics block** (copy this exactly):
+   ````
+   ```bash
+   mkdir -p ~/.gstack/analytics
+   echo '{"skill":"SKILL_NAME","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
+   ```
+   ````
+   Replace SKILL_NAME with the actual skill name.
+
+3. **Steps** — numbered, in natural language, with bash blocks where the pattern
+   used bash commands. Each step should:
+   - Explain WHAT to do and WHY (not just "run this command")
+   - Include the actual bash command if one was observed in the pattern
+   - Reference files by role, not hardcoded paths (e.g., "the test file for the
+     module being edited" not "/src/tests/foo.test.ts")
+   - Be self-contained — don't rely on shell variables from previous steps
+
+4. **Decision points** — if the pattern had branches (e.g., "if tests pass, commit;
+   if they fail, fix and re-run"), express these as English conditionals, not
+   nested bash if/else.
+
+5. **Completion** — what does "done" look like? Tell Claude when to stop.
+
+**Quality bar:** The generated skill should read like it was written by a human
+who does this workflow daily. Imagine handing it to a new team member — would they
+understand what to do and why?
+
+**Anti-patterns to avoid:**
+- Bracket placeholders like `[describe what to do here]` — fill them in
+- Hardcoded file paths from the specific sessions — generalize them
+- Giant bash blocks — break into steps with prose between them
+- Missing context — if a step requires judgment, explain the criteria
+
+### Step 4: Write the skill
+
+```bash
+mkdir -p ~/.claude/skills/gstack/[skill-name]
 ```
 
-3. Write it to a new directory: `~/.claude/skills/gstack/[skill-name]/SKILL.md.tmpl`
+Write the full SKILL.md.tmpl to `~/.claude/skills/gstack/[skill-name]/SKILL.md.tmpl`.
 
-4. Tell the user: "Draft saved. To activate it:
-   - Run `bun run gen:skill-docs` to generate the SKILL.md
-   - Symlink it: `ln -s ~/.claude/skills/gstack/[skill-name] ~/.claude/skills/gstack-[skill-name]`
-   - Test it in a new session with `/[skill-name]`"
+### Step 5: Generate and activate
+
+```bash
+cd ~/.claude/skills/gstack && bun run gen:skill-docs
+```
+
+Check if the skill prefix setting is configured:
+
+```bash
+~/.claude/skills/gstack/bin/gstack-config get skill_prefix 2>/dev/null || echo "unset"
+```
+
+Create the symlink based on prefix setting. If prefix is "gstack" or unset:
+```bash
+ln -sf ~/.claude/skills/gstack/[skill-name] ~/.claude/skills/gstack-[skill-name]
+```
+
+If prefix is empty (no prefix):
+```bash
+ln -sf ~/.claude/skills/gstack/[skill-name] ~/.claude/skills/[skill-name]
+```
+
+Tell the user: "Skill `/[skill-name]` is live. Test it in a new session.
+If it needs tweaking, edit `~/.claude/skills/gstack/[skill-name]/SKILL.md.tmpl`
+and re-run `bun run gen:skill-docs`."
 
 ---
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.21.4] - 2026-04-08 — Notetaker drafts real skills
+
+`/notetaker draft` now generates complete, ready-to-use skills — not empty skeletons. Spot a repeating workflow with `/notetaker patterns`, pick one, and draft creates a full SKILL.md.tmpl with role line, numbered steps, bash blocks, decision points, and analytics. It runs `gen:skill-docs` and creates the symlink so the skill is live immediately. No manual editing required.
+
+### Changed
+
+- **`/notetaker draft` generates full skill body.** Reconstructs the workflow from observed pattern data — tool sequences, file roles, bash commands — and writes a complete skill template. Includes quality guardrails: no bracket placeholders, no hardcoded paths, prose between bash blocks, explicit completion criteria.
+- **Auto-activation.** Draft now runs `gen:skill-docs` and creates the symlink (respecting prefix settings) so the skill works in the next session without manual steps.
+
 ## [0.21.3] - 2026-04-08 — Notetaker
 
 New `/notetaker` skill watches your session and spots repeatable workflows that could become skills. A PostToolUse hook silently journals every tool call (edits, commands, skill invocations) to `~/.gstack/sessions/`. Run `/notetaker patterns` after a few sessions to see what repetitive workflows it caught — then `/notetaker draft` to scaffold a new skill from an observed pattern.
