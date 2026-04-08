@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.21.3] - 2026-04-08 — Notetaker
+
+New `/notetaker` skill watches your session and spots repeatable workflows that could become skills. A PostToolUse hook silently journals every tool call (edits, commands, skill invocations) to `~/.gstack/sessions/`. Run `/notetaker patterns` after a few sessions to see what repetitive workflows it caught — then `/notetaker draft` to scaffold a new skill from an observed pattern.
+
+### Added
+
+- **`/notetaker` skill.** Session workflow observer — passive hook logs tool calls, analysis mode clusters them into repeatable patterns, draft mode scaffolds new skills from observed sequences.
+- **`journal-hook`** — lightweight PostToolUse hook (<10ms, never blocks). Skips read-only tools to keep noise low.
+- **`journal-read`** — CLI to browse journal entries by day, session, or repo with frequency stats.
+
 ## [0.21.2] - 2026-04-06 — Upstream Security + GStack Browser
 
 Pulled security hardening and browser stealth from upstream. 14 audit fixes plug path traversal, URL validation, cookie leaks, and TOCTOU races in the browse binary. Community security wave adds extension token isolation, output path validation, and sensitive data redaction. Pair-agent gets a 4-layer prompt injection defense. GStack Browser ships anti-bot stealth for AI-controlled Chromium.
