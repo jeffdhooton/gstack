@@ -42,6 +42,17 @@ export const META_COMMANDS = new Set([
 
 export const ALL_COMMANDS = new Set([...READ_COMMANDS, ...WRITE_COMMANDS, ...META_COMMANDS]);
 
+/**
+ * Commands eligible for Lightpanda fast path routing.
+ *
+ * These use standard page.evaluate() / page.content() — no Playwright-specific APIs.
+ * Excluded: snapshot/accessibility (ariaSnapshot), is (locator state), inspect (CDP session),
+ * console/network/dialog (server-side buffers), cookies (context.cookies).
+ */
+export const LP_ELIGIBLE_COMMANDS = new Set([
+  'text', 'html', 'links', 'forms', 'js', 'eval', 'css', 'attrs', 'storage', 'perf',
+]);
+
 /** Commands that return untrusted third-party page content */
 export const PAGE_CONTENT_COMMANDS = new Set([
   'text', 'html', 'links', 'forms', 'accessibility', 'attrs',
