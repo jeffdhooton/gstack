@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.22.0] - 2026-04-09 — Lightpanda dual-engine browser
+
+The browse daemon now runs two browser engines in parallel. Lightpanda — a headless browser built from scratch in Zig — handles DOM-only reads (text, HTML, links, forms, JS eval) at 15-23x the speed of Chromium. Playwright still handles screenshots, snapshots, and interactions. Routing is automatic: you don't change anything about how you use browse commands. `./setup` installs Lightpanda cross-platform. If it's unavailable, everything falls back to Playwright silently.
+
+### Added
+
+- **Lightpanda dual-engine.** Persistent CDP server runs alongside Playwright. Read commands (`text`, `html`, `links`, `forms`, `js`, `eval`, `css`, `attrs`, `storage`, `perf`) route through Lightpanda at 2-3ms per operation vs 43ms on Playwright.
+- **Automatic engine routing.** After navigation, LP lazy-syncs to the current URL. After interaction commands (click, fill, etc.), LP marks stale and reads fall back to Playwright until the next navigation.
+- **`./setup` installs Lightpanda.** Cross-platform binary download (macOS arm64/x86, Linux arm64/x86) to `~/.gstack/bin/lightpanda`. Non-fatal — skips gracefully on Windows or download failure.
+- **`status` shows LP state.** `Lightpanda: active (port N, synced/stale)` or `disabled` if binary not found.
+- **23 new tests.** LightpandaManager lifecycle, all 10 LP read commands, stale/fallback behavior, edge cases.
+
 ## [0.21.4] - 2026-04-08 — Notetaker drafts real skills
 
 `/notetaker draft` now generates complete, ready-to-use skills — not empty skeletons. Spot a repeating workflow with `/notetaker patterns`, pick one, and draft creates a full SKILL.md.tmpl with role line, numbered steps, bash blocks, decision points, and analytics. It runs `gen:skill-docs` and creates the symlink so the skill is live immediately. No manual editing required.
