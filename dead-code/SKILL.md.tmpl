@@ -75,14 +75,24 @@ if the tool is unavailable or the language has no good tooling.
 knip is the gold standard — entry-point aware, understands framework config
 (Next.js pages, React components, test files, scripts in package.json).
 
-```bash
-# Check if knip is available
-npx knip --version 2>/dev/null || echo "INSTALL_NEEDED"
-```
+**Before running knip**, check if the project uses a framework that needs
+entry point hints. knip often over-reports "unused files" when it doesn't
+know about convention-based routing:
 
-If knip is not installed, install it temporarily:
+1. **Inertia.js** (`@inertiajs/vue3` or `@inertiajs/react` in package.json):
+   Pages are resolved by convention, not explicit imports. knip will flag
+   every page as unused. Skip knip's `files` category for Inertia projects
+   and instead check pages against controller `Inertia::render()` calls.
+
+2. **Next.js** (`next` in package.json): knip has a built-in Next.js plugin.
+   Usually works correctly out of the box.
+
+3. **Nuxt** (`nuxt` in package.json): Auto-imports mean most composables
+   and components look "unused" to knip. Use `--include dependencies` to
+   limit the scan to deps only, and do component/composable analysis via grep.
+
 ```bash
-npx knip --reporter json 2>/dev/null | head -2000
+npx knip --reporter json 2>/dev/null | head -3000
 ```
 
 If knip fails (e.g., config issues), fall back to:
@@ -91,7 +101,7 @@ npx ts-prune 2>/dev/null | grep -v "used in module" | head -200
 ```
 
 **Parse knip JSON output** into these categories:
-- `files`: Entirely unused files (highest confidence)
+- `files`: Entirely unused files (highest confidence — but see framework caveats above)
 - `dependencies`: Unused packages in package.json
 - `devDependencies`: Unused dev packages
 - `unlisted`: Used but not declared dependencies
@@ -99,6 +109,12 @@ npx ts-prune 2>/dev/null | grep -v "used in module" | head -200
 - `types`: Exported types never used
 - `duplicates`: Re-exported from multiple places
 - `enumMembers`: Unused enum values
+
+**Dependency verification**: For each dependency knip flags as unused, do a
+quick grep to verify. If it's imported in even 1 file, it is NOT unused —
+move it to a "low-usage dependency" note (informational, not actionable).
+Only flag as P1 if there are truly zero imports/requires anywhere in the
+codebase.
 
 ### Go: deadcode
 
@@ -148,31 +164,68 @@ composer require --dev vimeo/psalm 2>/dev/null
 ./vendor/bin/psalm --find-dead-code --output-format=json 2>/dev/null | head -2000
 ```
 
-**Laravel-specific:** Also check for:
+**Laravel-specific:** Run these checks. Use `find | while read` (not
+`for f in glob`) to avoid errors when directories are empty.
+
+Check for unused middleware — search bootstrap/app.php, Kernel.php, routes,
+and config for references:
+
 ```bash
-# Unused routes (defined but controller method missing or never hit)
-grep -rn "Route::" routes/ 2>/dev/null | head -100
-
-# Unused middleware
-grep -rn "class.*Middleware" app/Http/Middleware/ 2>/dev/null | while read line; do
-  CLASS=$(echo "$line" | grep -oP 'class \K\w+')
-  REFS=$(grep -rn "$CLASS" app/ routes/ --include="*.php" | grep -v "class $CLASS" | wc -l)
-  [ "$REFS" -eq 0 ] && echo "UNUSED_MIDDLEWARE:$line"
+find app/Http/Middleware -name "*.php" 2>/dev/null | sort | while read f; do
+  CLASS=$(basename "$f" .php)
+  REFS=$(grep -rl "$CLASS" app/ routes/ bootstrap/ config/ --include="*.php" 2>/dev/null | grep -v "$f" | wc -l)
+  [ "$REFS" -eq 0 ] && echo "UNUSED_MIDDLEWARE:$f"
 done
+```
 
-# Unused models (defined but never referenced)
-for model in app/Models/*.php; do
+Check for unused models — search controllers, services, jobs, tests, and
+other models for references:
+
+```bash
+find app/Models -name "*.php" 2>/dev/null | sort | while read model; do
   CLASS=$(basename "$model" .php)
-  REFS=$(grep -rn "\b$CLASS\b" app/ routes/ database/ --include="*.php" | grep -v "class $CLASS" | wc -l)
-  [ "$REFS" -le 1 ] && echo "MAYBE_UNUSED_MODEL:$model"
+  REFS=$(grep -rl "\b${CLASS}\b" app/ routes/ database/ tests/ --include="*.php" 2>/dev/null | grep -v "$model" | wc -l)
+  [ "$REFS" -eq 0 ] && echo "UNUSED_MODEL:$model"
 done
+```
 
-# Unused Blade views
-for blade in $(find resources/views -name "*.blade.php"); do
+Check for unused Blade views — search for the dot-notation view name in
+PHP and Blade files:
+
+```bash
+find resources/views -name "*.blade.php" -not -path "*/vendor/*" 2>/dev/null | sort | while read blade; do
   VIEW=$(echo "$blade" | sed 's|resources/views/||;s|\.blade\.php||;s|/|.|g')
-  REFS=$(grep -rn "'$VIEW'" app/ routes/ resources/ --include="*.php" --include="*.blade.php" | wc -l)
+  REFS=$(grep -rl "'$VIEW'\|\"$VIEW\"" app/ routes/ resources/ --include="*.php" --include="*.blade.php" 2>/dev/null | wc -l)
   [ "$REFS" -eq 0 ] && echo "UNUSED_VIEW:$blade (view: $VIEW)"
 done
+```
+
+Check for unused services/actions — classes in app/Services/ or app/Actions/
+not referenced by any controller, job, or other service:
+
+```bash
+find app/Services app/Actions -name "*.php" 2>/dev/null | sort | while read svc; do
+  CLASS=$(basename "$svc" .php)
+  REFS=$(grep -rl "\b${CLASS}\b" app/ --include="*.php" 2>/dev/null | grep -v "$svc" | wc -l)
+  [ "$REFS" -eq 0 ] && echo "UNUSED_SERVICE:$svc"
+done
+```
+
+**Inertia page verification** — for Inertia projects, check which Vue/React
+pages are actually rendered by controllers:
+
+```bash
+# Extract all Inertia::render page names from PHP
+grep -rn "Inertia::render\|inertia(" app/ routes/ --include="*.php" 2>/dev/null | \
+  grep -oP "(?:render|inertia)\(['\"]([^'\"]+)" | \
+  sed "s/.*['\"]//;s/['\"].*//" | sort -u > /tmp/rendered-pages.txt
+
+# Find all page Vue files
+find resources/js/Pages -name "*.vue" 2>/dev/null | \
+  sed 's|resources/js/Pages/||;s|\.vue||;s|/|/|g' | sort > /tmp/all-pages.txt
+
+# Pages that exist but are never rendered
+comm -23 /tmp/all-pages.txt /tmp/rendered-pages.txt
 ```
 
 ### Python: vulture
@@ -186,6 +239,29 @@ vulture . --min-confidence 80 2>&1 | head -500
 
 ```bash
 cargo build 2>&1 | grep "warning.*dead_code\|warning.*unused" | head -200
+```
+
+### Vue/React component scanning (for any JS/TS project)
+
+For projects with Vue or React components, check for unused components and
+composables/hooks that knip may have missed or over-reported:
+
+```bash
+# Unused Vue components (not imported by any other Vue/TS/JS file)
+find resources/js/components src/components -name "*.vue" 2>/dev/null | sort | while read comp; do
+  NAME=$(basename "$comp" .vue)
+  REFS=$(grep -rl "$NAME" --include="*.vue" --include="*.ts" --include="*.js" --include="*.tsx" --include="*.jsx" . 2>/dev/null | grep -v "$comp" | grep -v node_modules | wc -l)
+  [ "$REFS" -eq 0 ] && echo "UNUSED_COMPONENT:$comp"
+done
+```
+
+```bash
+# Unused composables/hooks
+find resources/js/composables src/composables src/hooks -name "*.ts" -o -name "*.js" 2>/dev/null | sort | while read comp; do
+  NAME=$(basename "$comp" | sed 's/\.[^.]*$//')
+  REFS=$(grep -rl "$NAME" --include="*.vue" --include="*.ts" --include="*.js" --include="*.tsx" . 2>/dev/null | grep -v "$comp" | grep -v node_modules | wc -l)
+  [ "$REFS" -eq 0 ] && echo "UNUSED_COMPOSABLE:$comp"
+done
 ```
 
 ### Fallback: grep-based analysis
@@ -310,6 +386,38 @@ Review manually before removing.
 **Important:** For each finding, include the file path and line number
 so the user (or clean mode) can navigate directly to the dead code.
 
+### "Verified in-use" section
+
+**Always end the report with a "Not flagged (verified in-use)" section.**
+This builds trust by showing what you checked and cleared. List categories
+of things you verified are NOT dead code, with brief reasons:
+
+```
+## Not flagged (verified in-use)
+
+- All middleware — referenced in bootstrap/app.php or route groups
+- All models — referenced by controllers/services/tests
+- All Blade views — referenced by controllers or other views
+- canvas-confetti, three — imported in JS code (1-2 files each)
+- scripts/deploy.sh — referenced in CI workflow
+```
+
+This section is especially important when the tool (e.g., knip) initially
+flagged many items that turned out to be false positives. The user needs to
+know you investigated and dismissed them, not that you silently ignored them.
+
+### Low-usage dependencies (informational)
+
+If a dependency is imported in only 1-2 files, note it as informational
+but do NOT flag it as P1 unused. It's used — just lightly. Frame it as:
+
+> **Low-usage dependencies** (not dead, but worth knowing):
+> - `sharp` — imported only in `app/Services/ImageProcessor.php`
+> - `ws` — imported only in `scripts/chat-ws-proxy.mjs`
+
+This helps the user decide if they want to consolidate or remove these
+during a future cleanup, without the report crying wolf.
+
 If in **report mode**, stop here. Print the report and do NOT modify any files.
 
 ---
@@ -397,7 +505,10 @@ All tests passing. ✓
 - **Entry points:** main.go, index.ts, artisan, manage.py, bin/* — these
   are called by the runtime, not imported by other files
 - **Framework convention files:** Next.js pages/, app/, Laravel routes/,
-  migrations, seeders, factories, middleware registered in Kernel
+  migrations, seeders, factories, middleware registered in Kernel/bootstrap
+- **Inertia.js pages:** Pages resolved by `Inertia::render('Page/Name')` —
+  they look unused to import-based tools but are loaded at runtime by name.
+  Cross-reference against controller render calls, not import graphs.
 - **Test files:** *_test.go, *.test.ts, *.spec.js — used by test runner
 - **Config files:** *.config.js, .eslintrc, webpack.config, vite.config
 - **Type declarations:** *.d.ts, *.types.ts — consumed by compiler
