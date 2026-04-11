@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.23.0] - 2026-04-11 — /trawl skill — tiered web scraping for agents
+
+New `/trawl` skill wraps the trawl binary — a single Go binary that scrapes the web like Firecrawl, but locally. No API key. No Docker. No runtime dependency. Tiered HTTP → Chromium routing with persistent frontier that survives crashes, BFS site crawl from a seed URL, sitemap discovery, URL mapping, clean markdown extraction with readability, CSS selectors, and YAML schema extraction. `./setup` installs trawl via `go install` to `~/.gstack/bin/trawl`. The skill gives you a decision tree for picking the right command and nine recipes covering single-URL scrape, CSV batch with hybrid fallback, whole-site crawl to markdown corpus, and resume-after-SIGINT workflows.
+
+### Added
+
+- **`/trawl` skill.** Thick workflow guide. Decision tree (scrape / batch / crawl / map / sitemap / resume), nine core recipes with copy-paste commands, full JSONL output contract, failure-category bucket reference for `jq` filtering, Unix pipe composition examples, and advanced usage (content cache, tier pinning, screenshots, schema extraction). Covers when to use `/trawl` vs `/browse` vs `WebFetch`.
+- **`./setup` installs trawl.** `GOBIN=~/.gstack/bin go install github.com/jeffdhooton/trawl/cmd/trawl@latest`. Non-fatal — skips with a friendly message if Go isn't installed, and the skill reports a missing binary at runtime so nothing blocks setup for users who don't need scraping.
+
 ## [0.22.0] - 2026-04-09 — Lightpanda dual-engine browser
 
 The browse daemon now runs two browser engines in parallel. Lightpanda — a headless browser built from scratch in Zig — handles DOM-only reads (text, HTML, links, forms, JS eval) at 15-23x the speed of Chromium. Playwright still handles screenshots, snapshots, and interactions. Routing is automatic: you don't change anything about how you use browse commands. `./setup` installs Lightpanda cross-platform. If it's unavailable, everything falls back to Playwright silently.

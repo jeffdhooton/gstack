@@ -309,6 +309,38 @@ install_lightpanda() {
 
 install_lightpanda
 
+# 2c. Install trawl binary (tiered web scraper: HTTP → Chromium)
+# Non-fatal: trawl is optional — /trawl skill reports missing binary at runtime
+TRAWL_BIN="$HOME/.gstack/bin/trawl"
+TRAWL_MODULE="github.com/jeffdhooton/trawl/cmd/trawl@latest"
+
+install_trawl() {
+  # Skip if already installed. Delete the binary (or run /gstack-upgrade) to force reinstall.
+  if [ -x "$TRAWL_BIN" ]; then
+    return 0
+  fi
+
+  if ! command -v go >/dev/null 2>&1; then
+    echo "trawl: skipping (Go not installed — install from https://go.dev/dl/ to enable /trawl)"
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$TRAWL_BIN")"
+
+  echo "Installing trawl (${TRAWL_MODULE})..."
+  if GOBIN="$(dirname "$TRAWL_BIN")" go install "$TRAWL_MODULE" 2>&1; then
+    if [ -x "$TRAWL_BIN" ]; then
+      echo "  trawl installed to $TRAWL_BIN"
+    else
+      echo "  trawl: go install succeeded but binary missing at $TRAWL_BIN (non-fatal)"
+    fi
+  else
+    echo "  trawl: go install failed (non-fatal, /trawl will report this)"
+  fi
+}
+
+install_trawl
+
 # 3. Ensure ~/.gstack global state directory exists
 mkdir -p "$HOME/.gstack/projects"
 
