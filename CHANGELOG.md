@@ -1,5 +1,45 @@
 # Changelog
 
+## [0.23.0] - 2026-04-11 — /trawl skill — tiered web scraping for agents
+
+New `/trawl` skill wraps the trawl binary — a single Go binary that scrapes the web like Firecrawl, but locally. No API key. No Docker. No runtime dependency. Tiered HTTP → Chromium routing with persistent frontier that survives crashes, BFS site crawl from a seed URL, sitemap discovery, URL mapping, clean markdown extraction with readability, CSS selectors, and YAML schema extraction. `./setup` installs trawl via `go install` to `~/.gstack/bin/trawl`. The skill gives you a decision tree for picking the right command and nine recipes covering single-URL scrape, CSV batch with hybrid fallback, whole-site crawl to markdown corpus, and resume-after-SIGINT workflows.
+
+### Added
+
+- **`/trawl` skill.** Thick workflow guide. Decision tree (scrape / batch / crawl / map / sitemap / resume), nine core recipes with copy-paste commands, full JSONL output contract, failure-category bucket reference for `jq` filtering, Unix pipe composition examples, and advanced usage (content cache, tier pinning, screenshots, schema extraction). Covers when to use `/trawl` vs `/browse` vs `WebFetch`.
+- **`./setup` installs trawl.** `GOBIN=~/.gstack/bin go install github.com/jeffdhooton/trawl/cmd/trawl@latest`. Non-fatal — skips with a friendly message if Go isn't installed, and the skill reports a missing binary at runtime so nothing blocks setup for users who don't need scraping.
+
+## [0.22.0] - 2026-04-09 — Lightpanda dual-engine browser
+
+The browse daemon now runs two browser engines in parallel. Lightpanda — a headless browser built from scratch in Zig — handles DOM-only reads (text, HTML, links, forms, JS eval) at 15-23x the speed of Chromium. Playwright still handles screenshots, snapshots, and interactions. Routing is automatic: you don't change anything about how you use browse commands. `./setup` installs Lightpanda cross-platform. If it's unavailable, everything falls back to Playwright silently.
+
+### Added
+
+- **Lightpanda dual-engine.** Persistent CDP server runs alongside Playwright. Read commands (`text`, `html`, `links`, `forms`, `js`, `eval`, `css`, `attrs`, `storage`, `perf`) route through Lightpanda at 2-3ms per operation vs 43ms on Playwright.
+- **Automatic engine routing.** After navigation, LP lazy-syncs to the current URL. After interaction commands (click, fill, etc.), LP marks stale and reads fall back to Playwright until the next navigation.
+- **`./setup` installs Lightpanda.** Cross-platform binary download (macOS arm64/x86, Linux arm64/x86) to `~/.gstack/bin/lightpanda`. Non-fatal — skips gracefully on Windows or download failure.
+- **`status` shows LP state.** `Lightpanda: active (port N, synced/stale)` or `disabled` if binary not found.
+- **23 new tests.** LightpandaManager lifecycle, all 10 LP read commands, stale/fallback behavior, edge cases.
+
+## [0.21.4] - 2026-04-08 — Notetaker drafts real skills
+
+`/notetaker draft` now generates complete, ready-to-use skills — not empty skeletons. Spot a repeating workflow with `/notetaker patterns`, pick one, and draft creates a full SKILL.md.tmpl with role line, numbered steps, bash blocks, decision points, and analytics. It runs `gen:skill-docs` and creates the symlink so the skill is live immediately. No manual editing required.
+
+### Changed
+
+- **`/notetaker draft` generates full skill body.** Reconstructs the workflow from observed pattern data — tool sequences, file roles, bash commands — and writes a complete skill template. Includes quality guardrails: no bracket placeholders, no hardcoded paths, prose between bash blocks, explicit completion criteria.
+- **Auto-activation.** Draft now runs `gen:skill-docs` and creates the symlink (respecting prefix settings) so the skill works in the next session without manual steps.
+
+## [0.21.3] - 2026-04-08 — Notetaker
+
+New `/notetaker` skill watches your session and spots repeatable workflows that could become skills. A PostToolUse hook silently journals every tool call (edits, commands, skill invocations) to `~/.gstack/sessions/`. Run `/notetaker patterns` after a few sessions to see what repetitive workflows it caught — then `/notetaker draft` to scaffold a new skill from an observed pattern.
+
+### Added
+
+- **`/notetaker` skill.** Session workflow observer — passive hook logs tool calls, analysis mode clusters them into repeatable patterns, draft mode scaffolds new skills from observed sequences.
+- **`journal-hook`** — lightweight PostToolUse hook (<10ms, never blocks). Skips read-only tools to keep noise low.
+- **`journal-read`** — CLI to browse journal entries by day, session, or repo with frequency stats.
+
 ## [0.21.2] - 2026-04-06 — Upstream Security + GStack Browser
 
 Pulled security hardening and browser stealth from upstream. 14 audit fixes plug path traversal, URL validation, cookie leaks, and TOCTOU races in the browse binary. Community security wave adds extension token isolation, output path validation, and sensitive data redaction. Pair-agent gets a 4-layer prompt injection defense. GStack Browser ships anti-bot stealth for AI-controlled Chromium.

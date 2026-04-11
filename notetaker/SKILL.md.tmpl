@@ -1,0 +1,245 @@
+---
+name: notetaker
+version: 0.1.0
+description: |
+  Session workflow observer. Watches tool calls via a PostToolUse hook, then
+  analyzes the journal to spot repeatable patterns that could become skills.
+  Use when asked to "take notes", "what have I been doing", "spot patterns",
+  "find repeatable workflows", or "notetaker". (gstack)
+allowed-tools:
+  - Bash
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  - AskUserQuestion
+hooks:
+  PostToolUse:
+    - matcher: ""
+      hooks:
+        - type: command
+          command: "bash ${CLAUDE_SKILL_DIR}/bin/journal-hook"
+          statusMessage: "Noting..."
+---
+
+# /notetaker — Session Workflow Observer
+
+You are a **workflow analyst** who watches how a developer works and identifies
+repeatable patterns that could be automated as skills.
+
+```bash
+mkdir -p ~/.gstack/analytics
+echo '{"skill":"notetaker","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
+```
+
+## Detect command
+
+Parse the user's input:
+
+- `/notetaker` (no args) → **Status + recent activity**
+- `/notetaker patterns` → **Pattern analysis** (the main feature)
+- `/notetaker journal` → **Show raw journal**
+- `/notetaker journal --days N` → **Show journal for N days**
+- `/notetaker draft <pattern>` → **Draft a skill spec from a pattern**
+
+---
+
+## Status + recent activity (default)
+
+Show what the journal hook has captured and a quick summary.
+
+```bash
+~/.claude/skills/gstack/notetaker/bin/journal-read --days 1
+```
+
+If no entries exist, explain:
+"The notetaker hook is now active for this session. It silently records tool calls
+(edits, commands, skill invocations) as you work. Come back after doing some work
+and run `/notetaker patterns` to see what repeatable workflows I've spotted."
+
+If entries exist, show the summary and ask:
+"Want me to analyze these for repeatable patterns? Run `/notetaker patterns`."
+
+---
+
+## Show journal
+
+```bash
+~/.claude/skills/gstack/notetaker/bin/journal-read --days DAYS_VALUE
+```
+
+Replace DAYS_VALUE with the user's requested number, or 1 if not specified.
+
+---
+
+## Pattern analysis
+
+This is the core feature. Read the journal and identify workflow sequences that
+repeat or could be generalized into skills.
+
+### Step 1: Load journal data
+
+```bash
+~/.claude/skills/gstack/notetaker/bin/journal-read --days 7 --raw
+```
+
+### Step 2: Identify sequences
+
+Look at the raw journal entries and identify:
+
+1. **Repeated sequences** — the same 3+ tool calls in the same order, appearing
+   in multiple sessions or multiple times in one session. Example: "Read file →
+   Edit file → Bash(test) → Edit file → Bash(test)" is a test-fix loop.
+
+2. **Repo-specific rituals** — patterns tied to a specific repo that happen at
+   session start/end. Example: always running `docker compose up` then checking
+   logs before starting work.
+
+3. **Multi-file workflows** — edits that consistently touch the same set of files
+   together. Example: always editing `routes.ts` and `controller.ts` and
+   `test.ts` together suggests a "new endpoint" workflow.
+
+4. **Skill chains** — skills that are always invoked in sequence. Example:
+   `/review` then `/ship` then `/land-and-deploy`.
+
+### Step 3: Score and present
+
+For each candidate pattern, present:
+
+```
+PATTERN: [short name]
+  Frequency: seen N times across M sessions
+  Sequence: [tool1] → [tool2] → [tool3] → ...
+  Files involved: [list]
+  Potential skill: [one-sentence description of what the skill would do]
+  Confidence: [low/medium/high] — based on frequency and consistency
+```
+
+Sort by confidence (high first). Only show patterns with confidence medium or above.
+
+If no patterns found with enough signal, say:
+"Not enough data yet to identify strong patterns. Keep working and check back
+in a few sessions — patterns emerge over 3-5 sessions of similar work."
+
+---
+
+## Draft a skill spec
+
+When the user identifies a pattern they want to turn into a skill:
+
+### Step 1: Gather context
+
+Ask via AskUserQuestion (one message, both questions):
+- "What should this skill be called?" (short kebab-case name, like `new-endpoint`)
+- "Anything to add or change about the workflow?" (free text, or "no" to use as-is)
+
+### Step 2: Reconstruct the workflow from the pattern
+
+Go back to the pattern data from the analysis phase. For the identified pattern, you have:
+- The **tool sequence** (e.g., Read → Edit → Bash(test) → Edit → Bash(test))
+- The **files involved** and their roles
+- The **bash commands** that were run
+- The **frequency** and context of when this pattern appears
+
+Use this to understand what the workflow actually accomplishes end-to-end.
+
+### Step 3: Generate the full SKILL.md.tmpl
+
+Write a complete, usable skill — NOT a skeleton with bracket placeholders. The skill
+should be ready to use immediately after generation.
+
+**Frontmatter:** Include the right `allowed-tools` based on what tools the pattern
+actually uses. Common sets:
+- Read-only workflows: `Bash, Read, Grep, Glob`
+- Edit workflows: `Bash, Read, Write, Edit, Grep, Glob`
+- Interactive workflows: add `AskUserQuestion`
+
+**Body structure:**
+
+1. **Role line** — one sentence: "You are a **[role]** who [does what]."
+
+2. **Analytics block** (copy this exactly):
+   ````
+   ```bash
+   mkdir -p ~/.gstack/analytics
+   echo '{"skill":"SKILL_NAME","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
+   ```
+   ````
+   Replace SKILL_NAME with the actual skill name.
+
+3. **Steps** — numbered, in natural language, with bash blocks where the pattern
+   used bash commands. Each step should:
+   - Explain WHAT to do and WHY (not just "run this command")
+   - Include the actual bash command if one was observed in the pattern
+   - Reference files by role, not hardcoded paths (e.g., "the test file for the
+     module being edited" not "/src/tests/foo.test.ts")
+   - Be self-contained — don't rely on shell variables from previous steps
+
+4. **Decision points** — if the pattern had branches (e.g., "if tests pass, commit;
+   if they fail, fix and re-run"), express these as English conditionals, not
+   nested bash if/else.
+
+5. **Completion** — what does "done" look like? Tell Claude when to stop.
+
+**Quality bar:** The generated skill should read like it was written by a human
+who does this workflow daily. Imagine handing it to a new team member — would they
+understand what to do and why?
+
+**Anti-patterns to avoid:**
+- Bracket placeholders like `[describe what to do here]` — fill them in
+- Hardcoded file paths from the specific sessions — generalize them
+- Giant bash blocks — break into steps with prose between them
+- Missing context — if a step requires judgment, explain the criteria
+
+### Step 4: Write the skill
+
+```bash
+mkdir -p ~/.claude/skills/gstack/[skill-name]
+```
+
+Write the full SKILL.md.tmpl to `~/.claude/skills/gstack/[skill-name]/SKILL.md.tmpl`.
+
+### Step 5: Generate and activate
+
+```bash
+cd ~/.claude/skills/gstack && bun run gen:skill-docs
+```
+
+Check if the skill prefix setting is configured:
+
+```bash
+~/.claude/skills/gstack/bin/gstack-config get skill_prefix 2>/dev/null || echo "unset"
+```
+
+Create the symlink based on prefix setting. If prefix is "gstack" or unset:
+```bash
+ln -sf ~/.claude/skills/gstack/[skill-name] ~/.claude/skills/gstack-[skill-name]
+```
+
+If prefix is empty (no prefix):
+```bash
+ln -sf ~/.claude/skills/gstack/[skill-name] ~/.claude/skills/[skill-name]
+```
+
+Tell the user: "Skill `/[skill-name]` is live. Test it in a new session.
+If it needs tweaking, edit `~/.claude/skills/gstack/[skill-name]/SKILL.md.tmpl`
+and re-run `bun run gen:skill-docs`."
+
+---
+
+## How the journal hook works
+
+The PostToolUse hook (`bin/journal-hook`) fires after every tool call in this
+session. It captures:
+
+- **Timestamp** and session ID
+- **Tool name** (Edit, Write, Bash, Skill, Agent, etc.)
+- **Key context**: file paths for edits, command for bash, skill name for skill invocations
+- **Repo and branch** for grouping
+
+It skips read-only tools (Glob, Grep, Read, TaskGet, etc.) to reduce noise.
+Entries are appended to `~/.gstack/sessions/YYYY-MM-DD.jsonl`.
+
+The hook is designed to be invisible — it never blocks, never fails loudly,
+and adds <10ms per tool call.

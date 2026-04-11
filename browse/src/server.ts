@@ -754,7 +754,9 @@ if (BROWSE_PARENT_PID > 0) {
 }
 
 // ─── Command Sets (from commands.ts — single source of truth) ───
-import { READ_COMMANDS, WRITE_COMMANDS, META_COMMANDS } from './commands';
+import { READ_COMMANDS, WRITE_COMMANDS, META_COMMANDS, LP_ELIGIBLE_COMMANDS } from './commands';
+import { LightpandaManager } from './lightpanda';
+import { handleReadCommandLP } from './read-commands-lp';
 export { READ_COMMANDS, WRITE_COMMANDS, META_COMMANDS };
 
 // ─── Inspector State (in-memory) ──────────────────────────────
@@ -777,6 +779,7 @@ function emitInspectorEvent(event: any): void {
 
 // ─── Server ────────────────────────────────────────────────────
 const browserManager = new BrowserManager();
+const lightpandaManager = new LightpandaManager();
 let isShuttingDown = false;
 
 // Test if a port is available by binding and immediately releasing.
@@ -995,11 +998,38 @@ async function handleCommandInternal(
         } finally {
           await cleanupHiddenMarkers(page);
         }
+      } else if (
+        LP_ELIGIBLE_COMMANDS.has(command)
+        && !args.some(a => /^@[ec]\d/.test(a))  // no @ref args
+        && !browserManager.getFrame()             // no iframe context
+        && lightpandaManager.isAvailable()
+        && !lightpandaManager.isStale()
+      ) {
+        // Lightpanda fast path — 15-23x faster for DOM-only reads
+        try {
+          const pwUrl = browserManager.getCurrentUrl();
+          if (lightpandaManager.getCurrentUrl() !== pwUrl) {
+            await lightpandaManager.navigateTo(pwUrl);
+          }
+          result = await handleReadCommandLP(command, args, lightpandaManager);
+        } catch (err: any) {
+          // LP failed — fall back to Playwright silently
+          console.warn(`[browse] LP fallback for ${command}: ${err.message}`);
+          result = await handleReadCommand(command, args, browserManager);
+        }
       } else {
         result = await handleReadCommand(command, args, browserManager);
       }
     } else if (WRITE_COMMANDS.has(command)) {
       result = await handleWriteCommand(command, args, browserManager);
+      // Navigation commands: LP will lazy-sync on next read (URL mismatch triggers navigateTo)
+      // Interaction commands (click, fill, etc.): LP DOM is out of sync, mark stale
+      const isNavigation = command === 'goto' || command === 'back' || command === 'forward' || command === 'reload';
+      if (isNavigation) {
+        lightpandaManager.clearStale(); // URL changed — LP will re-navigate on next read
+      } else {
+        lightpandaManager.markStale();  // DOM changed — LP can't reflect PW interactions
+      }
     } else if (META_COMMANDS.has(command)) {
       // Pass chain depth + executeCommand callback so chain routes subcommands
       // through the full security pipeline (scope, domain, tab, wrapping).
@@ -1039,6 +1069,12 @@ async function handleCommandInternal(
           hint: `Available commands: ${[...READ_COMMANDS, ...WRITE_COMMANDS, ...META_COMMANDS].sort().join(', ')}`,
         }),
       };
+    }
+
+    // Append Lightpanda status to the status command output
+    if (command === 'status') {
+      const lp = lightpandaManager.getStatus();
+      result += `\nLightpanda: ${lp.available ? 'active' : 'disabled'}${lp.available ? ` (port ${lp.port}, ${lp.stale ? 'stale' : 'synced'})` : ''}`;
     }
 
     // ─── Centralized content wrapping (single location for all commands) ───
@@ -1166,6 +1202,7 @@ async function shutdown() {
   clearInterval(idleCheckInterval);
   await flushBuffers(); // Final flush (async now)
 
+  await lightpandaManager.stop();
   await browserManager.close();
 
   // Clean up Chromium profile locks (prevent SingletonLock on next launch)
@@ -1256,6 +1293,10 @@ async function start() {
       console.log(`[browse] Launched headed Chromium with extension`);
     } else {
       await browserManager.launch();
+    }
+    // Start Lightpanda fast path (non-blocking, non-fatal)
+    if (!skipBrowser) {
+      await lightpandaManager.start();
     }
   }
 

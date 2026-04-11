@@ -28,7 +28,7 @@ Originally created by [Garry Tan](https://github.com/garrytan/gstack). Maintaine
 
 Open Claude Code and paste this. Claude does the rest.
 
-> Install gstack: run **`git clone --single-branch --depth 1 https://github.com/jeffdhooton/gstack.git ~/.claude/skills/gstack && cd ~/.claude/skills/gstack && ./setup`** then add a "gstack" section to CLAUDE.md that says to use the /browse skill from gstack for all web browsing, never use mcp\_\_claude-in-chrome\_\_\* tools, and lists the available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-design-review, /design-consultation, /design-ref, /design-shotgun, /design-html, /review, /ship, /land-and-deploy, /canary, /benchmark, /browse, /connect-chrome, /qa, /qa-only, /qa-backend, /test-gen, /design-review, /setup-browser-cookies, /setup-deploy, /retro, /investigate, /document-release, /codex, /cso, /env-sync, /deps, /autoplan, /build, /orch, /careful, /freeze, /guard, /unfreeze, /gstack-upgrade, /learn, /index, /inbox, /pair, /checkpoint, /health, /perf. Then ask the user if they also want to add gstack to the current project so teammates get it.
+> Install gstack: run **`git clone --single-branch --depth 1 https://github.com/jeffdhooton/gstack.git ~/.claude/skills/gstack && cd ~/.claude/skills/gstack && ./setup`** then add a "gstack" section to CLAUDE.md that says to use the /browse skill from gstack for all web browsing, never use mcp\_\_claude-in-chrome\_\_\* tools, and lists the available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-design-review, /design-consultation, /design-ref, /design-shotgun, /design-html, /review, /ship, /land-and-deploy, /canary, /benchmark, /browse, /connect-chrome, /qa, /qa-only, /qa-backend, /test-gen, /design-review, /setup-browser-cookies, /setup-deploy, /retro, /investigate, /document-release, /codex, /cso, /env-sync, /deps, /autoplan, /build, /orch, /careful, /freeze, /guard, /unfreeze, /gstack-upgrade, /learn, /notetaker, /index, /inbox, /pair, /checkpoint, /health, /perf. Then ask the user if they also want to add gstack to the current project so teammates get it.
 
 ### Step 2: Add to your repo so teammates get it (optional)
 
@@ -175,6 +175,7 @@ Each skill feeds into the next. `/office-hours` writes a design doc that `/plan-
 | `/setup-browser-cookies` | **Session Manager** | Import cookies from your real browser (Chrome, Arc, Brave, Edge) into the headless session. Test authenticated pages. |
 | `/autoplan` | **Review Pipeline** | One command, fully reviewed plan. Runs CEO → design → eng review automatically with encoded decision principles. Surfaces only taste decisions for your approval. |
 | `/learn` | **Memory** | Manage what gstack learned across sessions. Review, search, prune, and export project-specific patterns, pitfalls, and preferences. Learnings compound across sessions so gstack gets smarter on your codebase over time. |
+| `/notetaker` | **Workflow Observer** | Silently journals every tool call via a global PostToolUse hook. Run `/notetaker patterns` to spot repeatable workflows across sessions, then `/notetaker draft` to generate a complete, ready-to-use skill from an observed pattern — full body, steps, analytics, symlink, done. `/learn` captures facts; `/notetaker` captures workflows. |
 | `/index` | **Codebase Cartographer** | Generate a compact codebase index that replaces 50K+ tokens of exploration per conversation. Auto-detects any framework (Laravel, Rails, Next.js, Django, Go, Rust, etc.) and maps routes, models, lib exports, pages, components, and config into small `.ai-codex/` reference files. Updates CLAUDE.md so every future session loads the index automatically. Auto-installs a git pre-commit hook to keep the index fresh. |
 | `/inbox` | **Session Coordinator** | Cross-session messaging. Send messages between concurrent Claude Code sessions — completion notifications, work handoffs, questions, status checks. Structured message types (`unblock`, `handoff`, `question`, `info`) tell the receiver what to do. Target specific projects or broadcast to all. Work claims prevent double-booking. |
 
@@ -347,7 +348,7 @@ Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-desig
 /canary, /benchmark, /browse, /open-gstack-browser, /qa, /qa-only, /qa-backend, /test-gen,
 /design-review, /setup-browser-cookies, /setup-deploy, /retro, /investigate,
 /document-release, /codex, /cso, /env-sync, /deps, /autoplan, /build, /orch, /pair-agent,
-/careful, /freeze, /guard, /unfreeze, /gstack-upgrade, /learn, /index, /inbox, /pair,
+/careful, /freeze, /guard, /unfreeze, /gstack-upgrade, /learn, /notetaker, /index, /inbox, /pair,
 /checkpoint, /health, /perf.
 ```
 

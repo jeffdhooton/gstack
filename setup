@@ -260,6 +260,87 @@ if ! ensure_playwright_browser; then
   exit 1
 fi
 
+# 2b. Install Lightpanda binary (fast headless browser for DOM-only operations)
+# Non-fatal: LP is optional — browse daemon falls back to Playwright if unavailable
+LP_VERSION="0.2.8"
+LP_BIN_DIR="$HOME/.gstack/bin"
+LP_BIN="$LP_BIN_DIR/lightpanda"
+LP_VERSION_FILE="$LP_BIN_DIR/.lightpanda-version"
+
+install_lightpanda() {
+  if [ "$IS_WINDOWS" -eq 1 ]; then
+    echo "Lightpanda: skipping (no Windows builds available)"
+    return 0
+  fi
+
+  # Check if already installed and current
+  if [ -x "$LP_BIN" ] && [ -f "$LP_VERSION_FILE" ] && [ "$(cat "$LP_VERSION_FILE" 2>/dev/null)" = "$LP_VERSION" ]; then
+    return 0
+  fi
+
+  # Detect platform
+  LP_OS=""
+  LP_CPU=""
+  case "$(uname -s)" in
+    Darwin) LP_OS="macos" ;;
+    Linux)  LP_OS="linux" ;;
+    *)      echo "Lightpanda: skipping (unsupported OS: $(uname -s))"; return 0 ;;
+  esac
+  case "$(uname -m)" in
+    arm64|aarch64) LP_CPU="aarch64" ;;
+    x86_64|amd64)  LP_CPU="x86_64" ;;
+    *)              echo "Lightpanda: skipping (unsupported arch: $(uname -m))"; return 0 ;;
+  esac
+
+  LP_ASSET="lightpanda-${LP_CPU}-${LP_OS}"
+  LP_URL="https://github.com/lightpanda-io/browser/releases/download/${LP_VERSION}/${LP_ASSET}"
+
+  echo "Installing Lightpanda ${LP_VERSION} (${LP_ASSET})..."
+  mkdir -p "$LP_BIN_DIR"
+  if curl -fsSL --retry 2 --retry-delay 1 -o "$LP_BIN" "$LP_URL" 2>/dev/null; then
+    chmod +x "$LP_BIN"
+    echo "$LP_VERSION" > "$LP_VERSION_FILE"
+    echo "  Lightpanda installed to $LP_BIN"
+  else
+    echo "  Lightpanda: download failed (non-fatal, browse will use Playwright only)"
+    rm -f "$LP_BIN"
+  fi
+}
+
+install_lightpanda
+
+# 2c. Install trawl binary (tiered web scraper: HTTP → Chromium)
+# Non-fatal: trawl is optional — /trawl skill reports missing binary at runtime
+TRAWL_BIN="$HOME/.gstack/bin/trawl"
+TRAWL_MODULE="github.com/jeffdhooton/trawl/cmd/trawl@latest"
+
+install_trawl() {
+  # Skip if already installed. Delete the binary (or run /gstack-upgrade) to force reinstall.
+  if [ -x "$TRAWL_BIN" ]; then
+    return 0
+  fi
+
+  if ! command -v go >/dev/null 2>&1; then
+    echo "trawl: skipping (Go not installed — install from https://go.dev/dl/ to enable /trawl)"
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$TRAWL_BIN")"
+
+  echo "Installing trawl (${TRAWL_MODULE})..."
+  if GOBIN="$(dirname "$TRAWL_BIN")" go install "$TRAWL_MODULE" 2>&1; then
+    if [ -x "$TRAWL_BIN" ]; then
+      echo "  trawl installed to $TRAWL_BIN"
+    else
+      echo "  trawl: go install succeeded but binary missing at $TRAWL_BIN (non-fatal)"
+    fi
+  else
+    echo "  trawl: go install failed (non-fatal, /trawl will report this)"
+  fi
+}
+
+install_trawl
+
 # 3. Ensure ~/.gstack global state directory exists
 mkdir -p "$HOME/.gstack/projects"
 
@@ -777,6 +858,16 @@ if [ -x "$INBOX_INSTALLER" ]; then
     : # Already installed
   else
     "$INBOX_INSTALLER" 2>/dev/null || true
+  fi
+fi
+
+# 9b. Install notetaker PostToolUse hook for session journaling
+JOURNAL_INSTALLER="$SOURCE_GSTACK_DIR/notetaker/bin/journal-install"
+if [ -x "$JOURNAL_INSTALLER" ]; then
+  if "$JOURNAL_INSTALLER" --check >/dev/null 2>&1; then
+    : # Already installed
+  else
+    "$JOURNAL_INSTALLER" 2>/dev/null || true
   fi
 fi
 

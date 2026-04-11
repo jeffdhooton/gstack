@@ -1,6 +1,6 @@
 {
   "name": "gstack",
-  "version": "0.21.2",
+  "version": "0.23.0",
   "description": "A complete AI engineering workflow for Claude Code. 40+ skills that turn slash commands into a full engineering team.",
   "license": "MIT",
   "type": "module",

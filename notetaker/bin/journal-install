@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# gstack journal-install — add the notetaker PostToolUse hook to Claude Code settings.
+# Safe to run multiple times (idempotent).
+#
+# Usage:
+#   journal-install          # install the hook
+#   journal-install --check  # check if installed (exit 0/1)
+#   journal-install --remove # remove the hook
+
+set -e
+
+SETTINGS_FILE="$HOME/.claude/settings.json"
+HOOK_SCRIPT="$HOME/.claude/skills/gstack/notetaker/bin/journal-hook"
+HOOK_MARKER="journal-hook"
+
+# ─── Parse flags ─────────────────────────────────────────
+MODE="install"
+case "${1:-}" in
+  --check)  MODE="check" ;;
+  --remove) MODE="remove" ;;
+esac
+
+# ─── Check mode ──────────────────────────────────────────
+if [ "$MODE" = "check" ]; then
+  if [ -f "$SETTINGS_FILE" ] && grep -q "$HOOK_MARKER" "$SETTINGS_FILE" 2>/dev/null; then
+    echo "Journal hook: installed"
+    exit 0
+  else
+    echo "Journal hook: not installed"
+    exit 1
+  fi
+fi
+
+# ─── Ensure settings file exists ─────────────────────────
+if [ ! -f "$SETTINGS_FILE" ]; then
+  echo '{}' > "$SETTINGS_FILE"
+fi
+
+# ─── Remove mode ─────────────────────────────────────────
+if [ "$MODE" = "remove" ]; then
+  if ! grep -q "$HOOK_MARKER" "$SETTINGS_FILE" 2>/dev/null; then
+    echo "Journal hook not found in settings — nothing to remove."
+    exit 0
+  fi
+  if command -v bun >/dev/null 2>&1; then
+    bun -e "
+      const fs = require('fs');
+      const settings = JSON.parse(fs.readFileSync('$SETTINGS_FILE', 'utf-8'));
+      if (settings.hooks?.PostToolUse) {
+        settings.hooks.PostToolUse = settings.hooks.PostToolUse.filter(
+          h => !JSON.stringify(h).includes('$HOOK_MARKER')
+        );
+        if (settings.hooks.PostToolUse.length === 0) delete settings.hooks.PostToolUse;
+        if (Object.keys(settings.hooks || {}).length === 0) delete settings.hooks;
+      }
+      fs.writeFileSync('$SETTINGS_FILE', JSON.stringify(settings, null, 2) + '\n');
+    "
+    echo "Journal hook removed from $SETTINGS_FILE"
+  else
+    echo "Error: bun required to safely edit settings.json" >&2
+    exit 1
+  fi
+  exit 0
+fi
+
+# ─── Install mode ────────────────────────────────────────
+if grep -q "$HOOK_MARKER" "$SETTINGS_FILE" 2>/dev/null; then
+  echo "Journal hook already installed."
+  exit 0
+fi
+
+if ! [ -x "$HOOK_SCRIPT" ]; then
+  echo "Error: hook script not found at $HOOK_SCRIPT" >&2
+  echo "Make sure gstack is installed at ~/.claude/skills/gstack/" >&2
+  exit 1
+fi
+
+if command -v bun >/dev/null 2>&1; then
+  bun -e "
+    const fs = require('fs');
+    const settings = JSON.parse(fs.readFileSync('$SETTINGS_FILE', 'utf-8'));
+
+    if (!settings.hooks) settings.hooks = {};
+    if (!settings.hooks.PostToolUse) settings.hooks.PostToolUse = [];
+
+    settings.hooks.PostToolUse.push({
+      matcher: '',
+      hooks: [{
+        type: 'command',
+        command: '$HOOK_SCRIPT',
+        statusMessage: 'Noting...'
+      }]
+    });
+
+    fs.writeFileSync('$SETTINGS_FILE', JSON.stringify(settings, null, 2) + '\n');
+  "
+  echo "Journal hook installed in $SETTINGS_FILE"
+  echo ""
+  echo "How it works:"
+  echo "  - Silently logs tool calls after each invocation"
+  echo "  - Journals stored at ~/.gstack/sessions/YYYY-MM-DD.jsonl"
+  echo "  - Run /notetaker patterns to spot repeatable workflows"
+  echo ""
+  echo "To remove: journal-install --remove"
+else
+  echo "Error: bun required to safely edit settings.json" >&2
+  exit 1
+fi

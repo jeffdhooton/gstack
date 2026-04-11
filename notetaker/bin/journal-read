@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# journal-read — Read and format session journal entries.
+# Usage:
+#   journal-read                    # today's entries
+#   journal-read --days 7           # last 7 days
+#   journal-read --session <id>     # specific session
+#   journal-read --repo <name>      # specific repo
+#   journal-read --raw              # raw JSONL (for piping to analysis)
+set -euo pipefail
+
+JOURNAL_DIR="$HOME/.gstack/sessions"
+DAYS=1
+SESSION_FILTER=""
+REPO_FILTER=""
+RAW=false
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --days) DAYS="$2"; shift 2 ;;
+    --session) SESSION_FILTER="$2"; shift 2 ;;
+    --repo) REPO_FILTER="$2"; shift 2 ;;
+    --raw) RAW=true; shift ;;
+    *) shift ;;
+  esac
+done
+
+if [ ! -d "$JOURNAL_DIR" ]; then
+  echo "No journal entries yet. The journal hook records tool calls as you work."
+  exit 0
+fi
+
+# Collect journal files for the date range
+FILES=""
+for i in $(seq 0 $((DAYS - 1))); do
+  if date -v-${i}d +%Y-%m-%d >/dev/null 2>&1; then
+    D=$(date -v-${i}d +%Y-%m-%d)
+  else
+    D=$(date -d "-${i} days" +%Y-%m-%d 2>/dev/null || continue)
+  fi
+  [ -f "$JOURNAL_DIR/${D}.jsonl" ] && FILES="$FILES $JOURNAL_DIR/${D}.jsonl"
+done
+
+if [ -z "$FILES" ]; then
+  echo "No journal entries for the last $DAYS day(s)."
+  exit 0
+fi
+
+# Concatenate and optionally filter
+COMBINED=$(cat $FILES)
+
+if [ -n "$SESSION_FILTER" ]; then
+  COMBINED=$(printf '%s\n' "$COMBINED" | grep "\"session\":\"$SESSION_FILTER\"" || true)
+fi
+
+if [ -n "$REPO_FILTER" ]; then
+  COMBINED=$(printf '%s\n' "$COMBINED" | grep "\"repo\":\"$REPO_FILTER\"" || true)
+fi
+
+if [ -z "$COMBINED" ]; then
+  echo "No matching journal entries."
+  exit 0
+fi
+
+if $RAW; then
+  printf '%s\n' "$COMBINED"
+  exit 0
+fi
+
+# Format for human reading
+TOTAL=$(printf '%s\n' "$COMBINED" | wc -l | tr -d ' ')
+SESSIONS=$(printf '%s\n' "$COMBINED" | grep -o '"session":"[^"]*"' | sort -u | wc -l | tr -d ' ')
+REPOS=$(printf '%s\n' "$COMBINED" | grep -o '"repo":"[^"]*"' | sort -u | sed 's/"repo":"//;s/"//' | tr '\n' ', ' | sed 's/,$//')
+
+echo "JOURNAL SUMMARY ($DAYS day(s))"
+echo "  Entries: $TOTAL"
+echo "  Sessions: $SESSIONS"
+echo "  Repos: $REPOS"
+echo ""
+
+# Show tool frequency
+echo "TOOL FREQUENCY:"
+printf '%s\n' "$COMBINED" | grep -o '"tool":"[^"]*"' | sed 's/"tool":"//;s/"//' | sort | uniq -c | sort -rn | head -15
+echo ""
+
+# Show file edit frequency (most-touched files)
+FILE_EDITS=$(printf '%s\n' "$COMBINED" | grep '"file":' | grep -o '"file":"[^"]*"' | sed 's/"file":"//;s/"//' | sort | uniq -c | sort -rn | head -10)
+if [ -n "$FILE_EDITS" ]; then
+  echo "MOST-TOUCHED FILES:"
+  echo "$FILE_EDITS"
+  echo ""
+fi
+
+# Show skill invocations
+SKILLS=$(printf '%s\n' "$COMBINED" | grep '"skill":' | grep -o '"skill":"[^"]*"' | sed 's/"skill":"//;s/"//' | sort | uniq -c | sort -rn)
+if [ -n "$SKILLS" ]; then
+  echo "SKILL INVOCATIONS:"
+  echo "$SKILLS"
+  echo ""
+fi
+
+# Show recent entries (last 20)
+echo "RECENT ENTRIES (last 20):"
+printf '%s\n' "$COMBINED" | tail -20 | python3 -c "
+import sys, json
+for line in sys.stdin:
+    line = line.strip()
+    if not line: continue
+    try:
+        e = json.loads(line)
+        ts = e.get('ts','?')[11:19]  # HH:MM:SS
+        tool = e.get('tool','?')
+        parts = [f'{ts} {tool}']
+        if 'file' in e: parts.append(e['file'].split('/')[-1])
+        if 'cmd' in e: parts.append(e['cmd'][:60])
+        if 'skill' in e: parts.append(f'/{e[\"skill\"]}')
+        if 'desc' in e: parts.append(e['desc'][:60])
+        print('  ' + ' | '.join(parts))
+    except: pass
+" 2>/dev/null
