@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.23.1] - 2026-04-12 — Remove YC branding and Garry Tan references
+
+`/office-hours` no longer pitches Y Combinator. The Garry Tan personal plea, 34 curated founder resources, YC application links, and resource dedup infrastructure are all gone. The skill now ends with a clean closing encouragement and moves straight to next-skill recommendations. Saves ~800 tokens per `/office-hours` session that were spent on recruitment copy.
+
+### Changed
+
+- **`/office-hours` closing stripped down.** Removed "Garry's Personal Plea" (3-tier YC pitch), "Founder Resources" pool (34 videos/essays with dedup logging), and `ycombinator.com/apply` CTAs. Replaced with a simple "Closing Encouragement" beat that reflects back what was strong about the user's thinking.
+- **Preamble lake intro simplified.** Removed garryslist.org link from the Boil the Lake introduction shown on first use.
+- **ETHOS.md cleaned up.** Removed garryslist.org link and depersonalized "Build for Yourself" section.
+- **README/LICENSE updated.** Attribution now reflects current maintainer only.
+- **Welcome page updated.** Browser welcome page footer and example URLs no longer reference YC or Garry Tan.
+- **Retro examples updated.** Sample contributor names and branch names in `/retro` template use generic placeholders.
+- **CLAUDE.md guardrails removed.** "Community PR guardrails" section that protected Garry/YC content from modification has been removed.
+
 ## [0.23.0] - 2026-04-11 — /trawl skill — tiered web scraping for agents
 
 New `/trawl` skill wraps the trawl binary — a single Go binary that scrapes the web like Firecrawl, but locally. No API key. No Docker. No runtime dependency. Tiered HTTP → Chromium routing with persistent frontier that survives crashes, BFS site crawl from a seed URL, sitemap discovery, URL mapping, clean markdown extraction with readability, CSS selectors, and YAML schema extraction. `./setup` installs trawl via `go install` to `~/.gstack/bin/trawl`. The skill gives you a decision tree for picking the right command and nine recipes covering single-URL scrape, CSV batch with hybrid fallback, whole-site crawl to markdown corpus, and resume-after-SIGINT workflows.

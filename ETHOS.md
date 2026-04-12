@@ -52,8 +52,6 @@ human engineering time was the bottleneck.
 - "Let's defer tests to a follow-up PR." (Tests are the cheapest lake to boil.)
 - "This would take 2 weeks." (Say: "2 weeks human / ~1 hour AI-assisted.")
 
-Read more: https://garryslist.org/posts/boil-the-ocean
-
 ---
 
 ## 2. Search Before Building
@@ -157,8 +155,7 @@ landscape, and saw what everyone else missed.
 
 ## Build for Yourself
 
-The best tools solve your own problem. gstack exists because its creator
-wanted it. Every feature was built because it was needed, not because it
-was requested. If you're building something for yourself, trust that instinct.
+The best tools solve your own problem. gstack exists because we wanted it.
+Every feature was built because it was needed, not because it was requested. If you're building something for yourself, trust that instinct.
 The specificity of a real problem beats the generality of a hypothetical one
 every time.

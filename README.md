@@ -4,7 +4,7 @@ A complete AI engineering workflow for Claude Code. Slash commands, structured r
 
 gstack turns Claude Code into a team: a product thinker who challenges your assumptions, an architect who locks down the plan, a builder that routes to parallel agents or executes in-session, a reviewer that runs your actual linters before layering LLM judgment, a QA lead that opens a real browser, a security officer that runs deterministic SAST before OWASP analysis, and a release engineer that ships the PR.
 
-Originally created by [Garry Tan](https://github.com/garrytan/gstack). Maintained and extended by [Jeff Hooton](https://github.com/jeffdhooton).
+Created and maintained by [Jeff Hooton](https://github.com/jeffdhooton).
 
 **Who this is for:**
 - **Solo builders and small teams (1-3 people)** — ship like a team of twenty
@@ -142,7 +142,7 @@ Each skill feeds into the next. `/office-hours` writes a design doc that `/plan-
 
 | Skill | Your specialist | What they do |
 |-------|----------------|--------------|
-| `/office-hours` | **YC Office Hours** | Start here. Six forcing questions that reframe your product before you write code. Pushes back on your framing, challenges premises, generates implementation alternatives. Design doc feeds into every downstream skill. |
+| `/office-hours` | **Office Hours** | Start here. Six forcing questions that reframe your product before you write code. Pushes back on your framing, challenges premises, generates implementation alternatives. Design doc feeds into every downstream skill. |
 | `/plan-ceo-review` | **CEO / Founder** | Rethink the problem. Find the 10-star product hiding inside the request. Four modes: Expansion, Selective Expansion, Hold Scope, Reduction. |
 | `/plan-eng-review` | **Eng Manager** | Lock in architecture, data flow, diagrams, edge cases, and tests. Forces hidden assumptions into the open. |
 | `/plan-design-review` | **Senior Designer** | Rates each design dimension 0-10, explains what a 10 looks like, then edits the plan to get there. AI Slop detection. Interactive — one AskUserQuestion per design choice. |

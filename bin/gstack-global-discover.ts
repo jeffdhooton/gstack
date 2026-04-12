@@ -241,7 +241,7 @@ function resolveClaudeCodeCwd(
   jsonlFiles: string[]
 ): string | null {
   // Fast-path: decode directory name
-  // e.g., -Users-garrytan-git-repo → /Users/garrytan/git/repo
+  // e.g., -Users-jeff-git-repo → /Users/jeff/git/repo
   const decoded = dirName.replace(/^-/, "/").replace(/-/g, "/");
   if (existsSync(decoded)) return decoded;
 
