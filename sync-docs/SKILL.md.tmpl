@@ -1,0 +1,247 @@
+---
+name: sync-docs
+version: 1.0.0
+preamble-tier: 1
+description: |
+  Sync all documentation with reality. Discovers every markdown file in the project,
+  cross-references against current code state, and updates anything stale. Works
+  post-session, post-feature, or anytime docs drift from code. Unlike /document-release,
+  this is not tied to shipping — no branch diff, no PR body, no CHANGELOG ceremony.
+  Use when asked to "sync docs", "update docs", "update all documentation",
+  "docs are stale", or at the end of a work session. (gstack)
+allowed-tools:
+  - Bash
+  - Read
+  - Write
+  - Edit
+  - Grep
+  - Glob
+  - AskUserQuestion
+---
+
+{{PREAMBLE}}
+
+# Sync Docs: Update All Documentation to Match Reality
+
+You are running the `/sync-docs` workflow. Your job: find every documentation file in
+the project and make sure it matches the current state of the code. This is not tied
+to a specific branch, PR, or ship event — it works anytime.
+
+You are mostly automated. Make obvious factual updates directly. Stop and ask only for
+risky or subjective decisions.
+
+**Only stop for:**
+- Narrative or philosophical changes (project positioning, design rationale)
+- Removing sections or large rewrites (more than ~10 lines in one section)
+- Ambiguous situations where you're not sure what the doc *should* say
+- New documentation files that should be created
+
+**Never stop for:**
+- Factual corrections clearly visible in the code (paths, counts, command names)
+- Adding items to tables or lists to match what exists
+- Fixing stale cross-references or broken internal links
+- Updating project structure trees
+- Removing references to files/features that no longer exist
+
+---
+
+## Step 1: Discover All Documentation
+
+Find every markdown file in the project, excluding generated output and dependencies:
+
+```bash
+find . -name "*.md" \
+  -not -path "./.git/*" \
+  -not -path "./node_modules/*" \
+  -not -path "./vendor/*" \
+  -not -path "./dist/*" \
+  -not -path "./.gstack/*" \
+  -not -path "./.context/*" \
+  | sort
+```
+
+Also check for other common doc formats:
+
+```bash
+find . -maxdepth 2 \( -name "*.rst" -o -name "*.txt" -name "*.adoc" \) \
+  -not -path "./.git/*" -not -path "./node_modules/*" \
+  | sort
+```
+
+**Classify each file into one of these buckets:**
+
+1. **Project docs** — README, CLAUDE.md, ARCHITECTURE, CONTRIBUTING, etc. These describe
+   how the project works and how to use it. Always audit these.
+2. **Feature/module docs** — docs inside subdirectories that describe a specific feature,
+   API, or subsystem (e.g., `docs/prompt-guide.md`, `genre-templates/README.md`). Audit
+   these against the code they describe.
+3. **Reference material** — Content files, notes, specs, or captured knowledge that describe
+   external things (not the code itself). Examples: editorial notes, meeting notes, research.
+   Skip these — they are not meant to track the codebase.
+4. **Generated docs** — Output from build tools, auto-generated indexes, API docs from
+   code comments. Skip these — they should be regenerated, not hand-edited.
+5. **AI context files** — `.ai-codex/`, codebase indexes, context files for AI tools.
+   Audit these — stale AI context is actively harmful.
+
+Output your classification:
+
+```
+Found N markdown files:
+  Project docs (K):    README.md, CLAUDE.md, ...
+  Feature docs (M):    docs/usage-guide.md, ...
+  Reference (R):       goodch3/calibration.md, ... [skipping]
+  Generated (G):       ... [skipping]
+  AI context (A):      .ai-codex/INDEX.md, ...
+```
+
+If unsure whether a file is reference material or a feature doc, read its first 20 lines
+to determine its purpose. Reference material talks about external concepts; feature docs
+talk about how this codebase works.
+
+---
+
+## Step 2: Gather Current Code State
+
+Build a picture of what the project actually looks like right now. This is your source
+of truth — documentation must match this, not vice versa.
+
+```bash
+# Project structure (top 3 levels)
+find . -maxdepth 3 -type f \
+  -not -path "./.git/*" \
+  -not -path "./node_modules/*" \
+  -not -path "./vendor/*" \
+  -not -path "./dist/*" \
+  -not -path "./output/*" \
+  | head -200
+```
+
+Check for project config that reveals commands and structure:
+
+```bash
+# Package manager scripts
+cat package.json 2>/dev/null | head -60
+cat Makefile 2>/dev/null | head -40
+cat composer.json 2>/dev/null | head -40
+cat Cargo.toml 2>/dev/null | head -40
+cat pyproject.toml 2>/dev/null | head -40
+```
+
+Also look at recent changes to understand what might have drifted:
+
+```bash
+git log --oneline -20
+```
+
+---
+
+## Step 3: Audit Each Documentation File
+
+For each file in the "Project docs", "Feature docs", and "AI context" buckets:
+
+1. **Read the file** in full.
+2. **Cross-reference against reality.** For each claim the doc makes, check:
+   - Does this file/directory still exist?
+   - Does this command still work? (Check package.json, Makefile, etc.)
+   - Are these counts/lists still accurate?
+   - Are code examples still valid?
+   - Do cross-references to other docs point to files that exist?
+3. **Classify each needed update** as auto-update or ask-user (using the rules above).
+
+**Common staleness patterns to watch for:**
+
+- **File trees** that list files/directories that don't exist or miss new ones
+- **Command references** that don't match the actual scripts in package.json/Makefile
+- **Feature lists** that are missing recently added features
+- **"Coming soon"** items that have actually been built
+- **Removed features** still described in docs
+- **Config instructions** that reference old env vars, old flags, or old file paths
+- **Counts** ("we have 12 endpoints") that have changed
+- **Internal links** to docs that were renamed or moved
+
+---
+
+## Step 4: Apply Updates
+
+Make all clear, factual updates directly using the Edit tool. For each edit, output a
+one-line summary:
+
+```
+  CLAUDE.md:           Updated project structure tree (added docs/ subdirectory)
+  README.md:           Fixed command — `npm test` changed to `bun test`
+  docs/usage-guide.md: Removed reference to deleted config option --legacy-mode
+  .ai-codex/routes.md: Added 3 new API routes, removed 2 deprecated ones
+```
+
+**Batch related edits per file** — don't make 10 separate Edit calls on the same file
+when you can make 2-3 larger ones.
+
+For ask-user items, collect them all and present them together:
+
+> I found 3 changes that need your input:
+>
+> 1. **README.md** — The "Philosophy" section mentions "we prioritize X over Y" but the
+>    code now does both. Should I update the framing or leave it?
+> 2. **docs/prompt-guide.md** — This file describes a workflow that no longer exists in
+>    the code. Remove the file, or update it to describe the current workflow?
+> 3. **CLAUDE.md** — Should I add a section documenting the new `/generate` command?
+
+Wait for answers, then apply.
+
+---
+
+## Step 5: Discoverability Check
+
+After updating individual files, verify that every doc is reachable:
+
+1. Read README.md and CLAUDE.md (the two entry points).
+2. For each doc file in the project, check if it's linked from at least one of:
+   - README.md
+   - CLAUDE.md
+   - Another doc that IS linked from README or CLAUDE.md
+3. Flag any orphaned docs — files that exist but aren't discoverable from any entry point.
+
+For orphaned docs, suggest where to add a link. Auto-add if it's clearly the right place
+(e.g., a `docs/` file that should be in a "Documentation" section of README). Ask if
+the placement is ambiguous.
+
+---
+
+## Step 6: Report
+
+Output a scannable summary of everything:
+
+```
+Documentation sync complete.
+
+  Files audited:    N
+  Files updated:    M
+  Files skipped:    R (reference/generated)
+  Files current:    K (no changes needed)
+
+  Changes made:
+    CLAUDE.md           — Updated project structure, added new commands
+    README.md           — Fixed install instructions, updated feature list
+    docs/usage-guide.md — Removed stale config reference
+    .ai-codex/INDEX.md  — Regenerated module index
+
+  Still needs attention:
+    docs/old-api.md     — Describes removed API; user chose to keep for now
+```
+
+If there are unstaged changes, remind: "Changes are unstaged. Review with `git diff`
+and commit when ready."
+
+---
+
+## Important Rules
+
+- **Read before editing.** Always read the full content of a file before modifying it.
+- **Reality wins.** If the code says one thing and the docs say another, the code is right.
+- **Don't create docs.** This skill updates existing documentation. If a major new feature
+  has zero docs, flag it and ask if you should create a new file — but default to no.
+- **Don't touch content files.** Reference material, notes, specs, editorial content — these
+  describe the world, not the codebase. Leave them alone.
+- **Be explicit about what changed.** Every edit gets a one-line summary in the report.
+- **Preserve voice.** Match the existing tone of each document. A casual README stays casual.
+  A formal architecture doc stays formal. Don't homogenize.

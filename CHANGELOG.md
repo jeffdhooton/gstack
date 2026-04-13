@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.23.2] - 2026-04-13 — /sync-docs skill — sync all documentation with reality
+
+You can now run `/sync-docs` at the end of any session or after any feature to update every documentation file in your project. Unlike `/document-release` (which is tied to the ship workflow), `/sync-docs` works anytime — no branch diff, no PR, no CHANGELOG ceremony. It recursively discovers all markdown files, classifies them (project docs vs. reference material vs. AI context vs. generated output), cross-references each one against the current state of the code, and auto-fixes factual drift. Stale `.ai-codex/` indexes, outdated file trees, wrong command references, and orphaned docs that nobody can find from README — it catches all of it.
+
+### Added
+
+- **`/sync-docs` skill.** Discovers every `.md` file in the project, classifies by purpose, audits against code reality, auto-updates factual drift, and reports a health summary. Smart enough to skip content/reference files and flag orphaned docs that aren't linked from any entry point.
+
 ## [0.23.1] - 2026-04-12 — Remove YC branding and Garry Tan references
 
 `/office-hours` no longer pitches Y Combinator. The Garry Tan personal plea, 34 curated founder resources, YC application links, and resource dedup infrastructure are all gone. The skill now ends with a clean closing encouragement and moves straight to next-skill recommendations. Saves ~800 tokens per `/office-hours` session that were spent on recruitment copy.
